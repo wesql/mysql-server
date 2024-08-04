@@ -3,7 +3,7 @@ Warnings:
 Note	####	Sending passwords in plain text without SSL/TLS is extremely insecure.
 Note	####	Storing MySQL user name or password information in the connection metadata repository is not secure and is therefore not recommended. Please consider using the USER and PASSWORD connection options for START REPLICA; see the 'START REPLICA Syntax' in the MySQL Manual for more information.
 [connection master]
-include/assert.inc [On master, the table should return an empty set.]
+include/assert.inc [On master, the table should return only consensus_replication_applier.]
 
 # Verify that SELECT works and produces an output similar to
 # the corresponding field in SHOW SLAVE STATUS(SSS) in all scenarios.

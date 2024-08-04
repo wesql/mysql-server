@@ -5,7 +5,7 @@ Note	####	Storing MySQL user name or password information in the connection meta
 [connection master]
 call mtr.add_suppression("Source command COM_REGISTER_REPLICA failed.");
 call mtr.add_suppression(" * does not exist in the InnoDB internal");
-include/assert.inc [On master, the table should return an empty set.]
+include/assert.inc [On master, the table should return only consensus_replication_applier.]
 
 # Verify that SELECT works for every field and produces an output
 # similar to the corresponding field in SHOW SLAVE STATUS(SSS).

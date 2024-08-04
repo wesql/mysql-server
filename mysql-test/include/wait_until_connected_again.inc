@@ -85,35 +85,38 @@ if ($SECONDARY_ENGINE_TEST) {
   }
 }
 
-
 if ($USE_CONSENSUS_CLUSTER)
 {
-  # wait leader election
-  if (!$wait_follower)
+  --let $CONSENSUS_IS_ENABLE_IN_THIS_MYSQLD = `select count(*)!=0 from information_schema.wesql_cluster_local`
+  if($CONSENSUS_IS_ENABLE_IN_THIS_MYSQLD)
   {
-    # wait leader from consensus
-    --let $counter = 6000
-    --let $check_counter = 10
-    while ($counter > 0) {
-      let $success= `select count(*)=1 from information_schema.wesql_cluster_local where role='leader'`;
-      if ($success) {
-        let $counter= 0;
-      }
-      if (!$success) {
-        --dec $check_counter
-        if ($check_counter == 0) {
-          call dbms_consensus.force_promote();
-          let $check_counter= 10;
+    # wait leader election
+    if (!$wait_follower)
+    {
+      # wait leader from consensus
+      --let $counter = 6000
+      --let $check_counter = 10
+      while ($counter > 0) {
+        let $success= `select count(*)=1 from information_schema.wesql_cluster_local where role='leader'`;
+        if ($success) {
+          let $counter= 0;
         }
-        --sleep 0.1
-        --dec $counter
+        if (!$success) {
+          --dec $check_counter
+          if ($check_counter == 0) {
+            call dbms_consensus.force_promote();
+            let $check_counter= 10;
+          }
+          --sleep 0.1
+          --dec $counter
+        }
       }
-    }
 
-    # wait leader enable read/write
-    let $wait_timeout= 60;
-    let $wait_condition= select SERVER_READY_FOR_RW='Yes' from information_schema.wesql_cluster_local;
-    --source include/wait_condition.inc
+      # wait leader enable read/write
+      let $wait_timeout= 60;
+      let $wait_condition= select SERVER_READY_FOR_RW='Yes' from information_schema.wesql_cluster_local;
+      --source include/wait_condition.inc
+    }
   }
 }
 

@@ -38,7 +38,6 @@ CREATE EVENT e1
 --sleep $naptime
 
 SET GLOBAL EVENT_SCHEDULER= ON;
-
 --echo Wait until the event is dropped to disable the event scheduler again.
 --let $wait_condition= SELECT COUNT(*) = 0 FROM information_schema.events
 --source include/wait_condition.inc
