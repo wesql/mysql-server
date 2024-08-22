@@ -86,9 +86,7 @@ KILL QUERY ID;
 SET DEBUG_SYNC= 'now SIGNAL killed';
 # Connection con1
 # Reaping: OPTIMIZE TABLE t1
-Table	Op	Msg_type	Msg_text
-test.t1	optimize	note	Table does not support optimize, doing recreate + analyze instead
-test.t1	optimize	status	Operation failed
+ERROR HY000: Error on observer while running replication hook 'before_commit'.
 # Connection default
 DROP TABLE t1;
 SET DEBUG_SYNC= 'RESET';

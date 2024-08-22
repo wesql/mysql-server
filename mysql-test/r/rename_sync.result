@@ -21,7 +21,8 @@ SET DEBUG_SYNC= 'now SIGNAL cont';
 connection con1;
 # Reap the rename and try to drop the table being renamed. Without the patch,
 # the drop leads to an assert.
-DROP TABLE t2;
+ERROR HY000: Error on observer while running replication hook 'before_commit'.
+DROP TABLE t1;
 connection default;
 # Disconnect and cleanup.
 disconnect con1;

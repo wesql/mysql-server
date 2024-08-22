@@ -1413,7 +1413,6 @@ uint sync_binlog_period = 0, sync_relaylog_period = 0,
      opt_mta_checkpoint_period, opt_mta_checkpoint_group;
 ulong expire_logs_days = 0;
 ulong binlog_expire_logs_seconds = 0;
-ulonglong binlog_purge_size = 0;
 bool opt_binlog_expire_logs_auto_purge{true};
 /**
   Soft upper limit for number of sp_head objects that can be stored

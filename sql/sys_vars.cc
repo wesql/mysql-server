@@ -2239,16 +2239,6 @@ static Sys_var_ulong Sys_binlog_expire_logs_seconds(
     VALID_RANGE(0, 0xFFFFFFFF), DEFAULT(2592000), BLOCK_SIZE(1), NO_MUTEX_GUARD,
     NOT_IN_BINLOG, ON_CHECK(check_expire_logs_seconds), ON_UPDATE(nullptr));
 
-static Sys_var_ulonglong Sys_binlog_purge_size(
-    "binlog_purge_size",
-    "If non-zero, binary logs will be purged after total binlogs' size is "
-    "larger than binlog_purge_size. Purges happen at startup and at"
-    "binary log rotation. If expire_logs_days or binlog_expire_logs_seconds "
-    "is set, this option takes priority.",
-    GLOBAL_VAR(binlog_purge_size),
-    CMD_LINE(REQUIRED_ARG, OPT_BINLOG_PURGE_SIZE),
-    VALID_RANGE(0, std::numeric_limits<ulonglong>::max()), DEFAULT(0), BLOCK_SIZE(IO_SIZE));
-
 static Sys_var_bool Sys_binlog_expire_logs_auto_purge(
     "binlog_expire_logs_auto_purge",
     "Controls whether the server shall automatically purge binary log "
