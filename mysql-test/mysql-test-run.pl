@@ -4543,19 +4543,19 @@ sub mysql_install_db {
 
   if ( $opt_consensus_cluster && $tinfo ) {
     #args
-    mtr_add_arg($args, "--consensus-replication-cluster-id=1");
-    mtr_add_arg($args, "--consensus-replication-start-index=1");
-    mtr_add_arg($args, "--consensus-replication-cluster-info=%s@%d", $consensus_cluster_info_prefix, $consensus_cluster_id_cnt);
-    mtr_add_arg($args, "--consensus-replication-election-timeout=1000");
-    mtr_add_arg($args, "--consensus-replication-io-thread_cnt=8");
-    mtr_add_arg($args, "--consensus-replication-worker-thread_cnt=8");
-    mtr_add_arg($args, "--consensus-replication-log-level=LOG_ERROR");
+    mtr_add_arg($args, "--raft-replication-cluster-id=1");
+    mtr_add_arg($args, "--raft-replication-start-index=1");
+    mtr_add_arg($args, "--raft-replication-cluster-info=%s@%d", $consensus_cluster_info_prefix, $consensus_cluster_id_cnt);
+    mtr_add_arg($args, "--raft-replication-election-timeout=1000");
+    mtr_add_arg($args, "--raft-replication-io-thread_cnt=8");
+    mtr_add_arg($args, "--raft-replication-worker-thread_cnt=8");
+    mtr_add_arg($args, "--raft-replication-log-level=LOG_ERROR");
     mtr_add_arg($args, "--skip-slave-start=OFF");
     if ($opt_consensus_replication) {
       $consensus_cluster_id_cnt++;
     }
   } else {
-    mtr_add_arg($args, "--loose-consensus-replication=0");
+    mtr_add_arg($args, "--loose-raft-replication=0");
   }
 
   # Log bootstrap command
@@ -6683,7 +6683,7 @@ sub mysqld_arguments ($$$) {
   }
 
   if (!$opt_consensus_cluster) {
-    mtr_add_arg($args, "--loose-consensus-replication=0");
+    mtr_add_arg($args, "--loose-raft-replication=0");
   }
 
   return $args;
@@ -7234,7 +7234,7 @@ sub start_servers($) {
   if ($opt_consensus_cluster && $opt_consensus_replication) {
     my $consensus_cluster_info_arr= ();
     foreach my $mysqld (mysqlds()) {
-      # paxos_port = (server_port + 8000)
+      # CONSENSUS_PORT = (server_port + 8000)
       push (@$consensus_cluster_info_arr, '127.0.0.1:'.($mysqld->value('port')+8000));
     }
     mtr_verbose('consensus_cluster_info_prefix: ' . join(';', @$consensus_cluster_info_arr));

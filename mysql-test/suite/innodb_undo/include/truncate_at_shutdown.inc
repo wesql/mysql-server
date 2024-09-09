@@ -199,7 +199,7 @@ if ($CRASH_ON_SHUTDOWN == 1)
 # if the injected crash was far enough along.
 if ($USE_CONSENSUS_CLUSTER)
 {
-  --let $restart_parameters="restart: --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info=\'127.0.0.1:29235@1\'"
+  --let $restart_parameters="restart: --raft-replication-cluster-id=1 --raft-replication-start-index=1 --raft-replication-cluster-info=\'127.0.0.1:29235@1\'"
 }
 if (!$USE_CONSENSUS_CLUSTER)
 {

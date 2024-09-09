@@ -184,7 +184,7 @@
 #endif /* WITH_LOCK_ORDER */
 #ifdef WESQL_CLUSTER
 #include "sql/rpl_msr.h"  // channel_map
-#include "plugin/consensus_replication/consensus_log_manager.h"
+#include "plugin/raft_replication/consensus_log_manager.h"
 #endif
 
 #ifdef WITH_SMARTENGINE
@@ -986,8 +986,8 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_START_GROUP_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_STOP_GROUP_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
 #ifdef WESQL_CLUSTER
-  sql_command_flags[SQLCOM_START_CONSENSUS_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
-  sql_command_flags[SQLCOM_STOP_CONSENSUS_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
+  sql_command_flags[SQLCOM_START_RAFT_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
+  sql_command_flags[SQLCOM_STOP_RAFT_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
 #endif
   sql_command_flags[SQLCOM_BEGIN] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_CHANGE_MASTER] |= CF_ALLOW_PROTOCOL_PLUGIN;
@@ -3678,7 +3678,7 @@ int mysql_execute_command(THD *thd, bool first_level) {
       break;
     }
 #ifdef WESQL_CLUSTER
-    case SQLCOM_START_CONSENSUS_REPLICATION:
+    case SQLCOM_START_RAFT_REPLICATION:
       if (is_consensus_replication_enabled()) {
         if (lex->slave_connection.password || lex->slave_connection.user) {
           my_error(ER_GROUP_REPLICATION_USER_MANDATORY_MSG, MYF(0));
@@ -3696,7 +3696,7 @@ int mysql_execute_command(THD *thd, bool first_level) {
         goto error;
       }
       break;
-    case SQLCOM_STOP_CONSENSUS_REPLICATION:
+    case SQLCOM_STOP_RAFT_REPLICATION:
       if (is_consensus_replication_enabled()) {
         /*
           If the client thread has locked tables, a deadlock is possible.

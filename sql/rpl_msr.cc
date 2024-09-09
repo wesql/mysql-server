@@ -39,7 +39,7 @@ const char *Multisource_info::group_replication_channel_names[] = {
 
 #ifdef WESQL_CLUSTER
 const char *Multisource_info::consensus_replication_applier =
-    "consensus_replication_applier";
+    "raft_replication_applier";
 #endif
 
 bool Multisource_info::add_mi(const char *channel_name, Master_info *mi) {

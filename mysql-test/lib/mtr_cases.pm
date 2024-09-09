@@ -1253,7 +1253,7 @@ sub collect_one_test_case {
   $tinfo->{'grp_rpl_test'} = 1 if ($suitename =~ 'group_replication');
 
   # Check for group replication tests
-  $tinfo->{'consensus_replication_test'} = 1 if ($suitename =~ 'consensus_replication');
+  $tinfo->{'consensus_replication_test'} = 1 if ($suitename =~ 'raft_replication');
 
   # Check for disabled tests
   if ($disabled->{"$suitename.$tname"}) {
@@ -1579,8 +1579,8 @@ my @tags = (
   [ "have_group_replication_plugin_base.inc", "grp_rpl_test", 1 ],
   [ "have_group_replication_plugin.inc",      "grp_rpl_test", 1 ],
 
-  # Tests with below .inc file are considered to be consensus_replication tests
-  [ "include/paxos.inc", "consensus_replication_test", 1 ],
+  # Tests with below .inc file are considered to be consensus_replication_test
+  [ "include/consensus_replication.inc", "consensus_replication_test", 1 ],
   [ "include/not_log_bin.inc", "not_log_bin", 1 ],
 
   # Tests with below .inc file needs either big-test or only-big-test

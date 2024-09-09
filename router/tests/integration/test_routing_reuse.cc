@@ -284,7 +284,7 @@ class SharedServer {
                 "--initialize-insecure",
                 "--datadir=" + mysqld_dir_name(),
 #ifdef WESQL_CLUSTER
-                "--consensus-replication=OFF",
+                "--raft-replication=OFF",
 #endif
                 "--log-error=" + mysqld_dir_name() +
                     mysql_harness::Path::directory_separator + "mysqld.err",

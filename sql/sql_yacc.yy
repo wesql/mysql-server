@@ -1425,7 +1425,7 @@ void warn_on_deprecated_user_defined_collation(
 /* Tolens for consensus replication */
 %token<lexer.keyword> CONSENSUS_SYM 1220
 %token<lexer.keyword> CONSENSUSLOG_SYM 1221
-%token<lexer.keyword> CONSENSUS_REPLICATION 1222
+%token<lexer.keyword> RAFT_REPLICATION 1222
 
 /*
   Resolve column attribute ambiguity -- force precedence of "UNIQUE KEY" against
@@ -2385,7 +2385,7 @@ simple_statement:
         | flush                         { $$= nullptr; }
         | get_diagnostics               { $$= nullptr; }
         | group_replication             { $$= nullptr; }
-        | consensus_replication         { $$= nullptr; }
+        | raft_replication              { $$= nullptr; }
         | grant                         { $$= nullptr; }
         | handler_stmt
         | help                          { $$= nullptr; }
@@ -9291,12 +9291,12 @@ replica:
       | REPLICA_SYM
       ;
 
-consensus_replication:
-                 START_SYM CONSENSUS_REPLICATION
+raft_replication:
+                 START_SYM RAFT_REPLICATION
                  {
 #ifdef WESQL_CLUSTER
                    LEX *lex=Lex;
-                   lex->sql_command = SQLCOM_START_CONSENSUS_REPLICATION;
+                   lex->sql_command = SQLCOM_START_RAFT_REPLICATION;
                    lex->type= 0;
                    lex->slave_thd_opt= 0;
                    lex->mi.channel= "";
@@ -9306,11 +9306,11 @@ consensus_replication:
                    MYSQL_YYABORT;
 #endif
                  }
-               | STOP_SYM CONSENSUS_REPLICATION
+               | STOP_SYM RAFT_REPLICATION
                  {
 #ifdef WESQL_CLUSTER
                    LEX *lex=Lex;
-                   lex->sql_command = SQLCOM_STOP_CONSENSUS_REPLICATION;
+                   lex->sql_command = SQLCOM_STOP_RAFT_REPLICATION;
                    lex->type= 0;
                    lex->slave_thd_opt= 0;
                    lex->mi.channel= "";
@@ -15456,7 +15456,7 @@ ident_keywords_unambiguous:
         | GET_SOURCE_PUBLIC_KEY_SYM
         | GRANTS
         | GROUP_REPLICATION
-        | CONSENSUS_REPLICATION
+        | RAFT_REPLICATION
         | GTID_ONLY_SYM
         | HASH_SYM
         | HISTOGRAM_SYM

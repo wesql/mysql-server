@@ -12329,10 +12329,10 @@ ER_CONSENSUS_RPL_NEEDS_TRANSACTIONAL_TABLE
   eng "Table %s does not use the transactional storage engine. This is not compatible with Consensus Replication."
 
 ER_CONSENSUS_RPL_IS_STOPPING
-  eng "Plugin 'consensus_replication' is stopping."
+  eng "Plugin 'raft_replication' is stopping."
 
 ER_CONSENSUS_RPL_IS_STOPPED
-  eng "Plugin 'consensus_replication' has been stopped."
+  eng "Plugin 'raft_replication' has been stopped."
 
 ER_CONSENSUS_RPL_FAILED_TO_START_ON_BOOT
   eng "Unable to start Consensus Replication on boot"

@@ -40,7 +40,7 @@ IF(INSTALL_MYSQLTESTDIR)
     PATTERN "*.cmake" EXCLUDE
     PATTERN "*.in" EXCLUDE
     PATTERN "autotest_*" EXCLUDE
-    PATTERN "consensus_replication" EXCLUDE
+    PATTERN "raft_replication" EXCLUDE
     PATTERN "wesql" EXCLUDE
     )
 
@@ -67,9 +67,9 @@ IF(INSTALL_MYSQLTESTDIR)
       USE_SOURCE_PERMISSIONS
       COMPONENT Test
       )
-    IF (WITH_CONSENSUS_REPLICATION)
+    IF (WITH_RAFT_REPLICATION)
       INSTALL(
-        DIRECTORY suite/consensus_replication
+        DIRECTORY suite/raft_replication
         DESTINATION ${INSTALL_MYSQLTESTDIR}/suite/
         USE_SOURCE_PERMISSIONS
         COMPONENT Test

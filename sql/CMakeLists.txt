@@ -646,7 +646,7 @@ IF(WITH_WESQL)
     package/proc_dummy.cc
     package/show_native_procedure.cc
   )
-  IF(WITH_CONSENSUS_REPLICATION)
+  IF(WITH_RAFT_REPLICATION)
     LIST(APPEND SQL_SHARED_SOURCES
       rpl_consensus_replication.cc
     )
@@ -1113,7 +1113,7 @@ SET (RPL_REPLICA_SRCS
   udf_service_util.cc
   )
 
-IF(WITH_CONSENSUS_REPLICATION)
+IF(WITH_RAFT_REPLICATION)
   LIST(APPEND RPL_REPLICA_SRCS
     consensus/consensus_info.cc
     consensus/consensus_info_factory.cc
