@@ -4541,7 +4541,7 @@ sub mysql_install_db {
     exit(0);
   }
 
-  if ( $opt_consensus_cluster && $tinfo ) {
+  if ( $opt_consensus_cluster && $tinfo && ($opt_consensus_replication || $mysqld->name() eq "mysqld.1") ) {
     #args
     mtr_add_arg($args, "--raft-replication-cluster-id=1");
     mtr_add_arg($args, "--raft-replication-start-index=1");
@@ -5256,7 +5256,7 @@ sub run_testcase ($) {
         mtr_error("Failed to wait the restart mysqld");
       }
       # remember the new leader
-      if (!$opt_consensus_replication || $mysqld->name() eq "mysqld.1") {
+      if ($mysqld->name() eq "mysqld.1") {
         $mysqld_leader = 1;
         mtr_verbose("I will become leader: " . $mysqld->name());
       }
@@ -6164,7 +6164,7 @@ sub check_warnings ($) {
   # it possible to wait for any process to exit during the check.
   my %started;
   foreach my $mysqld (mysqlds()) {
-    if ($opt_consensus_cluster) {
+    if ($opt_consensus_cluster && ($opt_consensus_replication || $mysqld->name() eq "mysqld.1")) {
       if (defined $mysqld->{'proc'} && $mysqld->name() eq "mysqld.1") {
         my $proc= start_check_warnings($tinfo, $mysqld);
         $started{$proc->pid()}= $proc;
@@ -6682,7 +6682,7 @@ sub mysqld_arguments ($$$) {
     mtr_add_arg($args, "%s", "--core-file");
   }
 
-  if (!$opt_consensus_cluster) {
+  if (!$opt_consensus_cluster || (!$opt_consensus_replication && $mysqld->name() ne "mysqld.1")) {
     mtr_add_arg($args, "--loose-raft-replication=0");
   }
 
@@ -6719,7 +6719,7 @@ sub mysqld_start ($$$$) {
     $daemonize_mysqld = 1 if ($arg eq "--daemonize");
 
     # disable some case with cnf not supported
-    if ($opt_consensus_cluster) {
+    if ($opt_consensus_cluster && ($opt_consensus_replication || $mysqld->name() eq "mysqld.1")) {
       if ($arg eq "--server-id=0") {
         mtr_print("Failed to start with mysqld option --server-id=0 for:", $mysqld->name());
         return 1;
@@ -7259,7 +7259,7 @@ sub start_servers($) {
       $ENV{$xcom_server} = $xcom_port;
     }
 
-    if ($opt_consensus_cluster && !$opt_consensus_replication) {
+    if ($opt_consensus_cluster && !$opt_consensus_replication && $mysqld->name() eq "mysqld.1") {
       $consensus_cluster_info_prefix = '127.0.0.1:'.($mysqld->value('port')+8000);
     }
 
@@ -7360,7 +7360,7 @@ sub start_servers($) {
 
     # Run <tname>-slave.sh
 
-    if (!$opt_consensus_cluster) {
+    if (!$opt_consensus_cluster || (!$opt_consensus_replication && $mysqld->name() ne "mysqld.1")) {
       if ($mysqld->option('#!run-slave-sh') and
         run_sh_script($tinfo->{slave_sh})) {
         $tinfo->{'comment'} = "Failed to execute '$tinfo->{slave_sh}'";
