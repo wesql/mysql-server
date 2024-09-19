@@ -322,6 +322,7 @@ class MYSQL_BIN_LOG : public TC_LOG {
   bool is_relay_log;
 
 #ifdef WESQL_CLUSTER
+  bool is_consensus_log;
   bool is_consensus_write;
 #endif
 
@@ -1202,7 +1203,7 @@ extern ulong rpl_read_size;
  */
 
 bool normalize_binlog_name(char *to, const char *from, bool is_relay_log);
-bool update_log_file_set_flag_in_use(const char *log_name);
+bool update_log_file_set_flag_in_use(const char *log_name, bool in_use);
 #ifdef WESQL_CLUSTER
 void binlog_update_end_pos(MYSQL_BIN_LOG *binlog, const char *file,
                            my_off_t pos);

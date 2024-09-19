@@ -5691,9 +5691,6 @@ int Rotate_log_event::do_update_pos(Relay_log_info *rli) {
                       : rli->is_in_group();
 
   if ((server_id != ::server_id || rli->replicate_same_server_id) &&
-#ifdef WESQL_CLUSTER
-      !thd->consensus_context.consensus_replication_applier &&
-#endif
       !is_relay_log_event() && !in_group) {
     if (!is_mts_db_partitioned(rli) &&
         (server_id != ::server_id || rli->replicate_same_server_id)) {

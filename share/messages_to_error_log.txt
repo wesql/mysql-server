@@ -12376,11 +12376,17 @@ ER_CONSENSUS_CONSIST_RECOVERY_INVALID_POSITION
 ER_CONSENSUS_MTS_RECOVERY_FINISHED
   eng "MTS recovery HWM consensus index: %llu, checkpoint consensus index: %llu.",
 
+ER_CONSENSUS_MTS_RECOVERY_LAST_LEAD_TERM_INDEX
+  eng "Consensus recovery applier start index, last leader log term: %llu, last leader term log index: %llu, last log term: %llu.",
+
 ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START
   eng "Consensus recovery applier start index, recover status: %llu, first_index: %llu, start apply index: %llu, committed HWM index: %llu, applier index: %llu."
 
 ER_CONSENSUS_RECOVERY_APPLIED_INDEX_STOP
   eng "Consensus recovery applier start index, recovered index: %llu."
+
+ER_CONSENSUS_RECOVERY_LAST_TERM_INDEX
+  eng "Failed to find the index of the last leader term"
 
 ER_CONSENSUS_FIND_LOG_ERROR
   eng "Failed to find consensus log for index %llu when %s"

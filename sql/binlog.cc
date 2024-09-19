@@ -3561,6 +3561,7 @@ MYSQL_BIN_LOG::MYSQL_BIN_LOG(uint *sync_period, bool relay_log)
       sync_counter(0),
       is_relay_log(relay_log),
 #ifdef WESQL_CLUSTER
+      is_consensus_log(false),    // used by consensus module
       is_consensus_write(false),  // writed by consensus module
 #endif
       checksum_alg_reset(binary_log::BINLOG_CHECKSUM_ALG_UNDEF),
@@ -6686,6 +6687,11 @@ int MYSQL_BIN_LOG::new_file_impl(
     Rotate_log_event r(new_name + dirname_length(new_name), 0, LOG_EVENT_OFFSET,
                        is_relay_log ? Rotate_log_event::RELAY_LOG : 0);
 
+#ifdef WESQL_CLUSTER
+    // don't be ignored by slave SQL thread
+    if (is_consensus_log) r.server_id = 0;
+#endif
+
     if (DBUG_EVALUATE_IF("fault_injection_new_file_rotate_event", (error = 1),
                          false) ||
         (error = write_event_to_binlog(&r))) {
@@ -6943,7 +6949,7 @@ bool MYSQL_BIN_LOG::truncate_update_log_file(const char *log_name,
   return true;
 }
 
-bool update_log_file_set_flag_in_use(const char *log_name) {
+bool update_log_file_set_flag_in_use(const char *log_name, bool in_use) {
   std::unique_ptr<MYSQL_BIN_LOG::Binlog_ofile> ofile(
       MYSQL_BIN_LOG::Binlog_ofile::open_existing(key_file_binlog, log_name, MYF(MY_WME)));
 
@@ -6952,8 +6958,7 @@ bool update_log_file_set_flag_in_use(const char *log_name) {
     return false;
   }
 
-  /* Set LOG_EVENT_BINLOG_IN_USE_F */
-  uchar flags = 1;
+  uchar flags = in_use ? 1 : 0;
   if (ofile->update(&flags, 1, BIN_LOG_HEADER_SIZE + FLAGS_OFFSET)) {
     LogErr(ERROR_LEVEL, ER_BINLOG_CANT_CLEAR_IN_USE_FLAG_FOR_CRASHED_BINLOG);
     return false;
@@ -7915,7 +7920,11 @@ void MYSQL_BIN_LOG::close(
     }
 
     /* The following update should not be done in relay log files */
-    if (!is_relay_log) {
+    if (!is_relay_log
+#ifdef WESQL_CLUSTER
+        && !is_consensus_write
+#endif
+    ) {
       my_off_t offset = BIN_LOG_HEADER_SIZE + FLAGS_OFFSET;
       uchar flags = 0;  // clearing LOG_EVENT_BINLOG_IN_USE_F
       (void)m_binlog_file->update(&flags, 1, offset);

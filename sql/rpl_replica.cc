@@ -4084,7 +4084,11 @@ void set_slave_thread_options(THD *thd) {
      only for client threads.
   */
   ulonglong options = thd->variables.option_bits | OPTION_BIG_SELECTS;
-  if (opt_log_replica_updates)
+  if (opt_log_replica_updates
+#ifdef WESQL_CLUSTER
+      && !thd->consensus_context.consensus_replication_applier
+#endif
+  )
     options |= OPTION_BIN_LOG;
   else
     options &= ~OPTION_BIN_LOG;
@@ -5129,7 +5133,12 @@ static int exec_relay_log_event(THD *thd, Relay_log_info *rli,
     }
 
 #ifdef WESQL_CLUSTER
-    RUN_HOOK(binlog_applier, before_apply_event, (rli, ev));
+    if (RUN_HOOK(binlog_applier, before_apply_event, (rli, ev))) {
+      rli->abort_slave = true;
+      mysql_mutex_unlock(&rli->data_lock);
+      delete ev;
+      return SLAVE_APPLY_EVENT_AND_UPDATE_POS_UPDATE_POS_ERROR;
+    }
 #endif
 
     /* ptr_ev can change to NULL indicating MTS coorinator passed to a Worker */
@@ -7429,6 +7438,7 @@ extern "C" void *handle_slave_sql(void *arg) {
       if (RUN_HOOK(binlog_applier, reader_before_read_event,
                    (rli, &applier_reader))) {
         mysql_mutex_unlock(&rli->data_lock);
+        main_loop_error = true;
         break;
       }
 #endif
@@ -7484,14 +7494,6 @@ extern "C" void *handle_slave_sql(void *arg) {
         binlog_relay_io, applier_stop,
         (thd, rli->mi, rli->is_error() || !rli->sql_thread_kill_accepted));
 
-#ifdef WESQL_CLUSTER
-    if (RUN_HOOK(binlog_applier, reader_before_close, (rli, &applier_reader))) {
-      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
-                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
-                  "Failed to run 'before_close_reader' hook");
-    }
-#endif
-
     slave_stop_workers(rli, &mts_inited);  // stopping worker pool
     /* Thread stopped. Print the current replication position to the log */
     if (slave_errno)
@@ -7505,14 +7507,6 @@ extern "C" void *handle_slave_sql(void *arg) {
     delete rli->current_mts_submode;
     rli->current_mts_submode = nullptr;
     rli->clear_mts_recovery_groups();
-
-#ifdef WESQL_CLUSTER
-    if (RUN_HOOK(binlog_applier, after_stop, (rli))) {
-      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
-                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
-                  "Failed to run 'after_stop' hook");
-    }
-#endif
 
     /*
       Some events set some playgrounds, which won't be cleared because thread
@@ -7530,6 +7524,22 @@ extern "C" void *handle_slave_sql(void *arg) {
     thd->set_catalog(NULL_CSTR);
     thd->reset_query();
     thd->reset_db(NULL_CSTR);
+
+#ifdef WESQL_CLUSTER
+    if (RUN_HOOK(binlog_applier, reader_before_close, (rli, &applier_reader))) {
+      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
+                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
+                  "Failed to run 'before_close_reader' hook");
+    }
+#endif
+
+#ifdef WESQL_CLUSTER
+    if (RUN_HOOK(binlog_applier, after_stop, (rli))) {
+      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
+                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
+                  "Failed to run 'after_stop' hook");
+    }
+#endif
 
     /*
       Pause the SQL thread and wait for 'continue_to_stop_sql_thread'

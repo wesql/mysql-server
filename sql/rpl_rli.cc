@@ -3668,6 +3668,7 @@ int Relay_log_info::cli_init_info(bool force_retriever_gtid) {
 
     relay_log.is_relay_log = true;
     relay_log.is_consensus_write = true;
+    relay_log.is_consensus_log = true;
 
     if (!gtid_retrieved_initialized || force_retriever_gtid) {
       /* Store the GTID of a transaction spanned in multiple relay log files */
