@@ -31,6 +31,10 @@
 #include "my_io.h"
 #include "sql/rpl_info_handler.h"  // enum_return_check
 
+#ifdef WESQL_CLUSTER
+class Consensus_info_factory;
+#endif
+
 class Master_info;
 class Multisource_info;
 class Relay_log_info;
@@ -177,6 +181,9 @@ class Rpl_info_factory {
   static bool load_channel_names_from_table(
       std::vector<std::string> &channel_list, const char *default_channel,
       bool *default_channel_created_previously);
+#ifdef WESQL_CLUSTER
+  friend class Consensus_info_factory;
+#endif
 };
 
 #endif

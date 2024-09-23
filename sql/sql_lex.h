@@ -2455,6 +2455,12 @@ typedef struct struct_slave_connection {
   void reset();
 } LEX_SLAVE_CONNECTION;
 
+#ifdef WESQL_CLUSTER
+typedef struct struct_consensus_info {
+  uint64 log_index;
+} LEX_CONSENSUS_INFO;
+#endif
+
 struct st_sp_chistics {
   LEX_CSTRING comment;
   enum enum_sp_suid_behaviour suid;
@@ -3869,6 +3875,9 @@ struct LEX : public Query_tables_list {
   KEY_CREATE_INFO key_create_info;
   LEX_MASTER_INFO mi;  // used by CHANGE MASTER
   LEX_SLAVE_CONNECTION slave_connection;
+#ifdef WESQL_CLUSTER
+  LEX_CONSENSUS_INFO consensus;
+#endif
   Server_options server_options;
   USER_RESOURCES mqh;
   LEX_RESET_SLAVE reset_slave_info;

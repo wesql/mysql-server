@@ -56,6 +56,10 @@
 #include "sql/system_variables.h"
 #include "sql/table.h"
 
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_handler.h"
+#endif
+
 /**
   Check the privileges required to execute a FLUSH command
 
@@ -230,6 +234,14 @@ bool handle_reload_request(THD *thd, unsigned long options, Table_ref *tables,
         than it would help them)
        */
       tmp_write_to_binlog = 0;
+
+#ifdef WESQL_CLUSTER
+      if (!NO_HOOK(binlog_manager)) {
+        if (RUN_HOOK(binlog_manager, rotate_and_purge, (thd, true)))
+          *write_to_binlog = -1;
+      } else
+#endif
+
       if (mysql_bin_log.is_open()) {
         if (mysql_bin_log.rotate_and_purge(thd, true)) *write_to_binlog = -1;
       }

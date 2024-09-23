@@ -522,6 +522,25 @@ ELSE()
   MARK_AS_ADVANCED(MYSQL_PROJECT_NAME)
 ENDIF()
 
+OPTION(WITH_WESQL "use wesql mode" ON)
+OPTION(WITH_CONSENSUS_REPLICATION "use consensus cluster mode" ON)
+OPTION(WITH_WESQL_TEST "wesql test mode" OFF)
+
+IF(WITH_WESQL)
+  ADD_DEFINITIONS(-DWESQL)
+  IF (DEFINED WITHOUT_CONSENSUS_REPLICATION AND WITHOUT_CONSENSUS_REPLICATION)
+    SET(WITH_CONSENSUS_REPLICATION OFF)
+  ENDIF()
+  IF (WITH_CONSENSUS_REPLICATION)
+    ADD_DEFINITIONS(-DWESQL_CLUSTER)
+  ENDIF()
+  IF(WITH_WESQL_TEST)
+    ADD_DEFINITIONS(-DWESQL_TEST)
+  ENDIF()
+ELSE()
+  SET(WITH_CONSENSUS_REPLICATION OFF)
+ENDIF()
+
 # Handle upgrade of old cmake cache
 IF(DEFINED WITH_PLUGIN_NDBCLUSTER)
   IF(NOT WITH_NDBCLUSTER)
@@ -808,6 +827,8 @@ INCLUDE(CMakePushCheckState)
 
 # Add macros
 INCLUDE(add_custom_target)
+INCLUDE(aws_sdk_cpp)
+INCLUDE(aliyun_oss_sdk)
 INCLUDE(pkg-config)
 INCLUDE(character_sets)
 INCLUDE(cmake_parse_arguments)
@@ -1749,6 +1770,12 @@ IF(WITH_SYSTEM_LIBS)
   UNSET(WITH_SYSTEM_LIBS CACHE)
 ENDIF()
 
+# Add bundled or system objstore lib, here is aws-sdk-cpp.
+MYSQL_CHECK_OBJSTORE_S3()
+
+# Add aliyun-oss-cpp-sdk, see https://github.com/aliyun/aliyun-oss-cpp-sdk
+MYSQL_CHECK_OBJSTORE_ALIYUN_OSS()
+
 # Add bundled or system zlib.
 MYSQL_CHECK_ZLIB()
 
@@ -2057,6 +2084,24 @@ IF(WITH_PROTOBUF STREQUAL "bundled" OR WITH_FIDO STREQUAL "bundled")
   ENDIF()
 ENDIF()
 
+
+#Compile the smartengine storage plugin into mysqld.
+OPTION(WITH_SMARTENGINE "Compile smartengine" ON)
+IF (WITH_SMARTENGINE)
+  ADD_DEFINITIONS(-DWITH_SMARTENGINE)
+ENDIF()
+
+OPTION(WITH_QUERY_TRACE "WITH_QUERY_TRACE" ON)
+if (WITH_QUERY_TRACE)
+  add_definitions(-DWITH_QUERY_TRACE)
+endif()
+
+#Ensure compatibility with the usage patterns of xengine
+OPTION(WITH_XENGINE_COMPATIBLE_MODE "Compatible with xengine" OFF)
+IF (WITH_XENGINE_COMPATIBLE_MODE)
+  ADD_DEFINITIONS(-DWITH_XENGINE_COMPATIBLE_MODE)
+ENDIF()
+
 #
 # Setup maintainer mode options by the end. Platform checks are
 # not run with the warning options as to not perturb fragile checks
@@ -2327,6 +2372,9 @@ IF(LINUX AND NOT WITHOUT_SERVER)
   IF(LINUX_SUSE)
     ADD_SUBDIRECTORY(packaging/rpm-sles)
   ENDIF()
+  IF(WITH_WESQL)
+    ADD_SUBDIRECTORY(packaging/build-wesql)
+  ENDIF()
 ENDIF()
 
 GET_PROPERTY(CWD_DEFINITIONS DIRECTORY PROPERTY COMPILE_DEFINITIONS)
@@ -2468,7 +2516,7 @@ ENDIF()
 #
 IF(NOT INSTALL_LAYOUT MATCHES "RPM")
   INSTALL(FILES
-    README
+    README.md
     LICENSE
     DESTINATION ${INSTALL_DOCREADMEDIR} COMPONENT Readme)
   INSTALL(FILES

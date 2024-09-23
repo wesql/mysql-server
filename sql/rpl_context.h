@@ -49,7 +49,8 @@ enum enum_rpl_channel_type {
   NO_CHANNEL_INFO = 0,       // No information exists about the channel
   RPL_STANDARD_CHANNEL = 1,  // It is a standard replication channel
   GR_APPLIER_CHANNEL = 2,    // It is a GR applier channel
-  GR_RECOVERY_CHANNEL = 3    // It is a GR recovery channel
+  GR_RECOVERY_CHANNEL = 3,   // It is a GR recovery channel
+  CR_APPLIER_CHANNEL = 4     // It is a CR applier channel
 };
 
 /**

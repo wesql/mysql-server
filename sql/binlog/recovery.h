@@ -147,6 +147,9 @@ class Binlog_recovery {
   Binlog_recovery &recover();
 
  private:
+#ifdef WESQL_CLUSTER
+ public:
+#endif
   /** File reader for the last available binary log file */
   Binlog_file_reader &m_reader;
   /** Position of the last binlog event that ended a transaction */

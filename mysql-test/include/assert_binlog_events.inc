@@ -269,14 +269,14 @@ while ($_abe_verdict != 'ok')
       if (
         # include header events
         ($include_header_events and
-         ($1 eq 'Format_desc' || $1 eq 'Rotate' || $1 eq 'Previous_gtids')) or
+         ($1 eq 'Format_desc' || $1 eq 'Rotate' || $1 eq 'Previous_gtids' || $1 eq 'Consensus_empty' || $1 eq 'Consensus_log')) or
 
         # include trx payload events
         ($include_trx_payload_events and ($1 eq 'Transaction_payload')) or
 
         # include all other events
         ($1 ne 'Format_desc' && $1 ne 'Rotate' &&
-         $1 ne 'Previous_gtids' && $1 ne 'Transaction_payload')
+         $1 ne 'Previous_gtids' && $1 ne 'Transaction_payload' && $1 ne 'Consensus_empty' && $1 ne 'Consensus_log')
       )
       {
         chomp;

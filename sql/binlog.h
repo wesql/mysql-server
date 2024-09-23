@@ -321,6 +321,10 @@ class MYSQL_BIN_LOG : public TC_LOG {
   /* This is relay log */
   bool is_relay_log;
 
+#ifdef WESQL_CLUSTER
+  bool is_consensus_write;
+#endif
+
   uint8 checksum_alg_reset;  // to contain a new value when binlog is rotated
   /*
     Holds the last seen in Relay-Log FD's checksum alg value.
@@ -921,6 +925,41 @@ class MYSQL_BIN_LOG : public TC_LOG {
   int get_current_log(LOG_INFO *linfo, bool need_lock_log = true);
   int raw_get_current_log(LOG_INFO *linfo);
   uint next_file_id();
+#ifdef WESQL_CLUSTER
+  int init_consensus_binlog(bool null_created_arg, bool need_sid_lock,
+                            bool &write_file_name_to_index_file,
+                            uint64 current_index, uint32 &tv_sec);
+  bool open_for_consensus(PSI_file_key log_file_key, const char *log_name,
+                          bool set_flags);
+  bool open_exist_consensus_binlog(const char *log_name, ulong max_size_arg,
+                                   bool set_flags, bool need_lock_index);
+  void update_binlog_end_pos(my_off_t pos);
+  int reopen_log_index(bool need_lock_index);
+  int switch_and_seek_log(const char *file_name, my_off_t offset,
+                          bool need_lock_index = false);
+  int get_file_names(std::vector<std::string> &file_name_vector);
+  bool consensus_init_gtid_sets(Gtid_set *all_gtids, Gtid_set *lost_gtids,
+                                bool verify_checksum, bool need_lock,
+                                bool is_server_starting = false,
+                                uint64 last_index = 0,
+                                const char *log_name = nullptr);
+  int truncate_logs_from_index(const char *last_file_name,
+                               std::vector<std::string> &delete_vector);
+  int truncate_files_after(const char *file_name, bool need_lock_index = false);
+  int truncate_all_files();
+  int truncate_log(const char *file_name, my_off_t offset,
+                   Relay_log_info *rli = NULL);
+
+  int new_file_from_archive(const char *archive_log_name, bool need_lock_log);
+  bool open_binlog_from_archive(
+#ifdef HAVE_PSI_INTERFACE
+      PSI_file_key log_file_key,
+#endif
+      const char *log_name, const char *new_name, ulong max_size_arg,
+      const char *archive_log_name, bool need_lock_index);
+
+  ulonglong get_log_size();
+#endif
   /**
     Retrieves the contents of the index file associated with this log object
     into an `std::list<std::string>` object. The order held by the index file is
@@ -1163,5 +1202,20 @@ extern ulong rpl_read_size;
  */
 
 bool normalize_binlog_name(char *to, const char *from, bool is_relay_log);
-
+bool update_log_file_set_flag_in_use(const char *log_name);
+#ifdef WESQL_CLUSTER
+void binlog_update_end_pos(MYSQL_BIN_LOG *binlog, const char *file,
+                           my_off_t pos);
+int truncate_binlog_file_to_valid_pos(const char *log_name, my_off_t valid_pos,
+                                      my_off_t binlog_size, bool update);
+int binlog_file_flush_and_sync(MYSQL_BIN_LOG::Binlog_ofile *binlog_file);
+my_off_t binlog_file_get_current_pos(MYSQL_BIN_LOG::Binlog_ofile *binlog_file);
+my_off_t binlog_file_get_real_size(MYSQL_BIN_LOG::Binlog_ofile *binlog_file);
+int write_buffer_to_binlog_file(MYSQL_BIN_LOG::Binlog_ofile *binlog_file,
+                                const unsigned char *buffer, my_off_t length);
+Binlog_cache_storage *binlog_cache_get_storage(binlog_cache_data *cache_data);
+size_t binlog_cache_get_event_counter(binlog_cache_data *binlog_cache);
+void update_trx_compression(binlog_cache_data *cache_data, Gtid &owned_gtid, 
+                            uint64_t immediate_commit_timestamp);
+#endif
 #endif /* BINLOG_H_INCLUDED */

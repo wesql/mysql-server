@@ -110,6 +110,11 @@
 #include "template_utils.h"
 #include "thr_lock.h"
 #include "violite.h"
+#ifdef WESQL
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_consensus_replication.h"
+#endif
+#endif
 
 enum enum_check_fields : int;
 enum enum_tx_isolation : int;
@@ -1803,6 +1808,11 @@ class THD : public MDL_context_owner,
     with timer_cache timer to reuse.
   */
   struct THD_timer_info *timer_cache;
+
+#ifdef WESQL_CLUSTER
+public:
+  Consensus_binlog_context_info consensus_context;
+#endif
 
  private:
   /*

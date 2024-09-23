@@ -150,17 +150,55 @@ ADD_CUSTOM_COMMAND(
   ${CMAKE_CURRENT_SOURCE_DIR}/firewall_stored_procedures.sql
 )
 
+IF(WITH_WESQL)
+  ADD_CUSTOM_COMMAND(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_wesql.h
+    COMMAND comp_sql
+    wesql_system_tables
+    ${CMAKE_CURRENT_SOURCE_DIR}/wesql_system_tables.sql
+    sql_commands_system_tables_wesql.h
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS comp_sql
+    ${CMAKE_CURRENT_SOURCE_DIR}/wesql_system_tables.sql
+  )
+
+  ADD_CUSTOM_COMMAND(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_fix_wesql.h
+    COMMAND comp_sql
+    wesql_system_tables_fix
+    ${CMAKE_CURRENT_SOURCE_DIR}/wesql_system_tables_fix.sql
+    sql_commands_system_tables_fix_wesql.h
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    DEPENDS comp_sql
+    ${CMAKE_CURRENT_SOURCE_DIR}/wesql_system_tables_fix.sql
+  )
+ENDIF()
+
 # Add target for the above to be built
 IF(NOT WITHOUT_SERVER)
-  MY_ADD_CUSTOM_TARGET(GenBootstrapPriv
-    ALL
-    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_data.h
-    ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables.h
-    ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_users.h
-    ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_help_data.h
-    ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_data_fix.h
-    ${CMAKE_CURRENT_BINARY_DIR}/sql_firewall_stored_procedures.h
-  )
+  IF(NOT WITH_WESQL)
+    MY_ADD_CUSTOM_TARGET(GenBootstrapPriv
+      ALL
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_data.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_users.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_help_data.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_data_fix.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_firewall_stored_procedures.h
+    )
+  ELSE()
+    MY_ADD_CUSTOM_TARGET(GenBootstrapPriv
+      ALL
+      DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_data.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_users.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_help_data.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_data_fix.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_firewall_stored_procedures.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_wesql.h
+      ${CMAKE_CURRENT_BINARY_DIR}/sql_commands_system_tables_fix_wesql.h
+    )
+  ENDIF()
 ENDIF()
 
 IF(UNIX)

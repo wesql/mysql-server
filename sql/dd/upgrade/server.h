@@ -75,6 +75,10 @@ bool no_server_upgrade_required();
 
 bool I_S_upgrade_required();
 
+#ifdef WESQL
+bool initialize_wesql_schemas(THD *thd);
+#endif
+
 }  // namespace upgrade
 
 }  // namespace dd

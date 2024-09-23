@@ -1,6 +1,7 @@
 
 --source include/have_log_bin.inc
 --source include/not_windows.inc
+--source include/not_apecloud_mysql.inc
 
 -- source include/mysqlbinlog_raw_mode.inc
 

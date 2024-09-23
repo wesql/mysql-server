@@ -5084,7 +5084,11 @@ static inline size_t my_strnxfrm_unicode_tmpl(const CHARSET_INFO *cs,
   }
 
 pad:
+#ifdef WITH_SMARTENGINE
+  if (dst < de && nweights && !(flags & MY_STRXFRM_NOPAD_WITH_SPACE))
+#else
   if (dst < de && nweights)  // PAD SPACE behavior.
+#endif
     dst += my_strxfrm_pad_nweights_unicode(dst, de, nweights);
 
   if ((flags & MY_STRXFRM_PAD_TO_MAXLEN) && dst < de)
@@ -5154,7 +5158,11 @@ size_t my_strnxfrm_unicode_full_bin(const CHARSET_INFO *cs, uchar *dst,
         if (dst < de) *dst++ = 0x20;
       }
     }
+#ifdef WITH_SMARTENGINE
+  } else if (!(flags & MY_STRXFRM_NOPAD_WITH_SPACE)) {
+#else
   } else {
+#endif
     // Regular PAD SPACE behavior.
     for (; dst < de && nweights; nweights--) {
       *dst++ = 0x00;

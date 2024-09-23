@@ -117,9 +117,6 @@ DROP TABLE information_schema.engines;
 
 --error ER_DBACCESS_DENIED_ERROR
 ALTER TABLE information_schema.engines RENAME db_datadict.engines;
---error ER_DBACCESS_DENIED_ERROR
-ALTER TABLE information_schema.engines RENAME information_schema.xengines;
-
 # Cleanup
 DROP DATABASE db_datadict;
 

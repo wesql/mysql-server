@@ -26,6 +26,23 @@
 #include <mysql/psi/mysql_file.h>
 #include "my_dbug.h"
 
+#ifdef WESQL_CLUSTER
+ssize_t IO_cache_istream::read(unsigned char *buffer, size_t length) {
+  DBUG_ENTER("IO_CACHE_istream::read");
+  if (my_b_read(m_io_cache, buffer, length) ||
+      DBUG_EVALUATE_IF("simulate_magic_header_io_failure", 1, 0))
+    DBUG_RETURN(m_io_cache->error);
+  DBUG_RETURN(static_cast<longlong>(length));
+}
+
+bool IO_cache_istream::open() {
+  if (reinit_io_cache(m_io_cache, READ_CACHE, 0, false, false)) {
+    return true;
+  }
+  return false;
+}
+#endif
+
 IO_CACHE_istream::IO_CACHE_istream() = default;
 
 IO_CACHE_istream::~IO_CACHE_istream() { close(); }

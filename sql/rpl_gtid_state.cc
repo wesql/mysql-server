@@ -880,7 +880,12 @@ void Gtid_state::update_gtids_impl_own_gtid(THD *thd, bool is_commit) {
     CONDITIONAL_SYNC_POINT_FOR_TIMESTAMP("before_gtid_externalization");
     executed_gtids._add_gtid(thd->owned_gtid);
     thd->rpl_thd_ctx.session_gtids_ctx().notify_after_gtid_executed_update(thd);
-    if (thd->slave_thread && opt_bin_log && !opt_log_replica_updates) {
+    if (thd->slave_thread &&
+#ifdef WESQL_CLUSTER
+        // consensus applier can't add owned gtid to lost and not in table set
+        !thd->consensus_context.consensus_replication_applier &&
+#endif
+        opt_bin_log && !opt_log_replica_updates) {
       lost_gtids._add_gtid(thd->owned_gtid);
       gtids_only_in_table._add_gtid(thd->owned_gtid);
     }

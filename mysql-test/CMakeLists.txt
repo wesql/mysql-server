@@ -39,7 +39,44 @@ IF(INSTALL_MYSQLTESTDIR)
     PATTERN "mtr.out*" EXCLUDE
     PATTERN "*.cmake" EXCLUDE
     PATTERN "*.in" EXCLUDE
+    PATTERN "autotest_*" EXCLUDE
+    PATTERN "consensus_replication" EXCLUDE
+    PATTERN "wesql" EXCLUDE
     )
+
+  IF (WITH_SMARTENGINE)
+    INSTALL(
+      DIRECTORY suite/
+      DESTINATION ${INSTALL_MYSQLTESTDIR}/suite
+      USE_SOURCE_PERMISSIONS
+      COMPONENT Test
+      PATTERN "suite/smartengine*"
+      )
+
+    FILE(GLOB autotestfiles "autotest_*.sh")
+    INSTALL(
+      FILES ${autotestfiles}
+      DESTINATION ${INSTALL_MYSQLTESTDIR}/
+      COMPONENT Test
+      )
+  ENDIF()
+  IF (WITH_WESQL)
+    INSTALL(
+      DIRECTORY suite/wesql
+      DESTINATION ${INSTALL_MYSQLTESTDIR}/suite/
+      USE_SOURCE_PERMISSIONS
+      COMPONENT Test
+      )
+    IF (WITH_CONSENSUS_REPLICATION)
+      INSTALL(
+        DIRECTORY suite/consensus_replication
+        DESTINATION ${INSTALL_MYSQLTESTDIR}/suite/
+        USE_SOURCE_PERMISSIONS
+        COMPONENT Test
+        )
+    ENDIF()
+  ENDIF()
+
   IF(NOT INSTALL_LAYOUT MATCHES "RPM" AND
       NOT INSTALL_LAYOUT MATCHES "DEB")
     INSTALL(FILES ${CMAKE_SOURCE_DIR}/LICENSE
@@ -47,7 +84,7 @@ IF(INSTALL_MYSQLTESTDIR)
       COMPONENT TestReadme
       RENAME LICENSE-test
       )
-    INSTALL(FILES ${CMAKE_SOURCE_DIR}/README
+    INSTALL(FILES ${CMAKE_SOURCE_DIR}/README.md
       DESTINATION ${INSTALL_DOCREADMEDIR}
       COMPONENT TestReadme
       RENAME README-test

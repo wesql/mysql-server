@@ -197,7 +197,15 @@ if ($CRASH_ON_SHUTDOWN == 1)
 # The truncate will get started during shutdown using the settings above.
 # The restarted engine does not need these settings to complete the truncate
 # if the injected crash was far enough along.
---let $restart_parameters="restart:"
+if ($USE_CONSENSUS_CLUSTER)
+{
+  --let $restart_parameters="restart: --consensus-replication-cluster-id=1 --consensus-replication-start-index=1 --consensus-replication-cluster-info=\'127.0.0.1:29235@1\'"
+}
+if (!$USE_CONSENSUS_CLUSTER)
+{
+  --let $restart_parameters="restart:"
+}
+-- echo restart_parameters: "$restart_parameters"
 --let $explicit_default_wait_counter = 15000
 --source include/start_mysqld.inc
 

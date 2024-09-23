@@ -984,6 +984,12 @@ bool Rpl_info_factory::configure_channel_replication_filters(
   */
   if (channel_map.is_group_replication_channel_name(channel_name)) return false;
 
+
+#ifdef WESQL_CLUSTER
+  /* Consensus replication channels should not be configurable */
+  if (channel_map.is_consensus_replication_channel_name(channel_name)) return false;
+#endif
+
   if (Master_info::is_configured(rli->mi)) {
     /*
       A slave replication channel would copy global replication filters

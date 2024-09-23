@@ -77,6 +77,10 @@
 #include "sql_string.h"
 #include "thr_mutex.h"
 
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_handler.h"
+#endif
+
 class Item;
 
 using std::max;
@@ -435,6 +439,10 @@ bool Relay_log_info::mts_finalize_recovery() {
   uint repo_type = get_rpl_info_handler()->get_rpl_info_type();
 
   DBUG_TRACE;
+
+#ifdef WESQL_CLUSTER
+  (void)RUN_HOOK(binlog_applier, on_mts_finalize_recovery, (this));
+#endif
 
   for (Slave_worker **it = workers.begin(); !ret && it != workers.end(); ++it) {
     Slave_worker *w = *it;
@@ -1494,6 +1502,19 @@ err:
   return res;
 }
 
+#ifdef WESQL_CLUSTER
+/* reset previous_gtid_set_of_relaylog through gtid_set */
+int Relay_log_info::reset_previous_gtid_set_of_consensus_log() {
+  if (relay_log.consensus_init_gtid_sets(gtid_set, NULL,
+                                         opt_source_verify_checksum, true)) {
+    LogErr(ERROR_LEVEL, ER_CONSENSUS_LOG_RESET_PREVIOUS_GITD_SET_ERROR);
+    return 1;
+  }
+
+  return 0;
+}
+#endif
+
 int Relay_log_info::rli_init_info(bool skip_received_gtid_set_recovery) {
   int error = 0;
   enum_return_check check_return = ERROR_CHECKING_REPOSITORY;
@@ -1512,6 +1533,15 @@ int Relay_log_info::rli_init_info(bool skip_received_gtid_set_recovery) {
     not and so init_info() must be aware of previous failures.
   */
   if (error_on_rli_init_info) goto err;
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_applier)) {
+    bool exit_init = false;
+    error = RUN_HOOK(binlog_applier, rli_init_info,
+                     (this, skip_received_gtid_set_recovery, exit_init));
+    if (error || exit_init) return error;
+  }
+#endif
 
   if (inited) {
     return recovery_parallel_workers ? mts_recovery_groups(this) : 0;
@@ -1845,6 +1875,14 @@ void Relay_log_info::end_info() {
 
   error_on_rli_init_info = false;
   if (!inited) return;
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_applier)) {
+    bool exit_end_info = false;
+    (void)RUN_HOOK(binlog_applier, rli_end_info, (this, exit_end_info));
+    if (exit_end_info) return;
+  }
+#endif
 
   handler->end_info();
 
@@ -2364,6 +2402,7 @@ bool Relay_log_info::write_info(Rpl_info_handler *to) {
           m_assign_gtids_to_anonymous_transactions_info.get_value().c_str())) {
     return true; /* purecov: inspected */
   }
+
   return false;
 }
 
@@ -2655,8 +2694,13 @@ void Relay_log_info::relay_log_number_to_name(uint number,
                                               char name[FN_REFLEN + 1]) {
   char *str = nullptr;
   char relay_bin_channel[FN_REFLEN + 1];
-  const char *relay_log_basename_channel = add_channel_to_relay_log_name(
-      relay_bin_channel, FN_REFLEN + 1, relay_log_basename);
+  const char *relay_log_basename_channel =
+#ifdef WESQL_CLUSTER
+      info_thd->consensus_context.consensus_replication_applier
+          ? log_bin_basename :
+#endif
+          add_channel_to_relay_log_name(relay_bin_channel, FN_REFLEN + 1,
+                                        relay_log_basename);
 
   /* str points to closing null of relay log basename channel */
   str = strmake(name, relay_log_basename_channel, FN_REFLEN + 1);
@@ -2844,6 +2888,10 @@ bool Relay_log_info::commit_positions() {
   new_group_relay_log_pos = get_group_relay_log_pos();
 
   error = flush_info(RLI_FLUSH_IGNORE_SYNC_OPT);
+
+#ifdef WESQL_CLUSTER
+  (void)RUN_HOOK(binlog_applier, on_commit_positions, (this, nullptr, false));
+#endif
 
   /*
     Restore the saved ones so they remain actual until the replicated
@@ -3547,3 +3595,222 @@ void Applier_security_context_guard::extract_columns_to_check(
     }
   }
 }
+
+#ifdef WESQL_CLUSTER
+int Relay_log_info::cli_init_info(bool force_retriever_gtid) {
+  int error = 0;
+  enum_return_check check_return = ERROR_CHECKING_REPOSITORY;
+  const char *msg = nullptr;
+  DBUG_TRACE;
+
+  mysql_mutex_assert_owner(&data_lock);
+
+  /*
+    If Relay_log_info is issued again after a failed init_info(), for
+    instance because of missing relay log files, it will generate new
+    files and ignore the previous failure, to avoid that we set
+    error_on_rli_init_info as true.
+    This a consequence of the behaviour change, in the past server was
+    stopped when there were replication initialization errors, now it is
+    not and so init_info() must be aware of previous failures.
+  */
+  if (error_on_rli_init_info) goto err;
+
+  if (inited) {
+    return recovery_parallel_workers ? mts_recovery_groups(this) : 0;
+  }
+
+  slave_skip_counter = 0;
+  abort_pos_wait = 0;
+  log_space_limit = relay_log_space_limit;
+  log_space_total = 0;
+  tables_to_lock = nullptr;
+  tables_to_lock_count = 0;
+
+  char pattern[FN_REFLEN];
+  (void)my_realpath(pattern, replica_load_tmpdir, 0);
+  /*
+   @TODO:
+    In MSR, sometimes slave fail with the following error:
+    Unable to use slave's temporary directory /tmp -
+    Can't create/write to file
+   '/tmp/SQL_LOAD-92d1eee0-9de4-11e3-8874-68730ad50fcb'    (Errcode: 17 - File
+   exists), Error_code: 1
+
+   */
+  if (fn_format(pattern, PREFIX_SQL_LOAD, pattern, "",
+                MY_SAFE_PATH | MY_RETURN_REAL_PATH) == NullS) {
+    LogErr(ERROR_LEVEL, ER_REPLICA_CANT_USE_TEMPDIR, replica_load_tmpdir);
+    return 1;
+  }
+  unpack_filename(slave_patternload_file, pattern);
+  slave_patternload_file_size = strlen(slave_patternload_file);
+
+  /*
+    The relay log will now be opened, as a WRITE_CACHE IO_CACHE.
+    Note that the I/O thread flushes it to disk after writing every
+    event, in flush_info within the master info.
+  */
+  {
+    /* The base name of the relay log file considering multisource rep */
+    const char *ln;
+    /* name of the index file if opt_relaylog_index_name is set*/
+    const char *log_index_name;
+
+    /*  set relay log name as same as binlog name */
+    ln = opt_bin_logname;
+    log_index_name = log_bin_index;
+
+    if (relay_log.open_index_file(log_index_name, ln, true)) {
+      LogErr(ERROR_LEVEL, ER_RPL_OPEN_INDEX_FILE_FAILED);
+      return 1;
+    }
+
+    relay_log.is_relay_log = true;
+    relay_log.is_consensus_write = true;
+
+    if (!gtid_retrieved_initialized || force_retriever_gtid) {
+      /* Store the GTID of a transaction spanned in multiple relay log files */
+      Gtid_monitoring_info *partial_trx = mi->get_gtid_monitoring_info();
+      partial_trx->clear();
+#ifndef NDEBUG
+      get_sid_lock()->wrlock();
+      gtid_set->dbug_print("set of GTIDs in relay log before initialization");
+      get_sid_lock()->unlock();
+#endif
+      /*
+        In the init_gtid_set below we pass the mi->transaction_parser.
+        This will be useful to ensure that we only add a GTID to
+        the Retrieved_Gtid_Set for fully retrieved transactions. Also, it will
+        be useful to ensure the Retrieved_Gtid_Set behavior when auto
+        positioning is disabled (we could have transactions spanning multiple
+        relay log files in this case).
+        We will skip this initialization if relay_log_recovery is set in order
+        to save time, as neither the GTIDs nor the transaction_parser state
+        would be useful when the relay log will be cleaned up later when calling
+        init_recovery.
+      */
+      if (relay_log.consensus_init_gtid_sets(
+              gtid_set, nullptr, opt_source_verify_checksum, true)) {
+        LogErr(ERROR_LEVEL, ER_RPL_CANT_INITIALIZE_GTID_SETS_IN_AM_INIT_INFO);
+        return 1;
+      }
+      gtid_retrieved_initialized = true;
+#ifndef NDEBUG
+      get_sid_lock()->wrlock();
+      gtid_set->dbug_print("set of GTIDs in relay log after initialization");
+      get_sid_lock()->unlock();
+#endif
+    }
+    /*
+      Configures what object is used by the current log to store processed
+      gtid(s). This is necessary in the MYSQL_BIN_LOG::MYSQL_BIN_LOG to
+      correctly compute the set of previous gtids.
+    */
+    relay_log.set_previous_gtid_set_relaylog(gtid_set);
+
+    relay_log.is_relay_log = false;
+
+    /*
+      note, that if open() fails, we'll still have index file open
+      but a destructor will take care of that
+    */
+    mysql_mutex_t *log_lock = relay_log.get_log_lock();
+    mysql_mutex_lock(log_lock);
+
+    // If performed from a consistent snapshot, a new binlog shoule
+    // be created for writing after recovery. because the previous
+    // binlog from the object store cannot be updated.
+    if ((consistent_recovery_consensus_recovery &&
+         relay_log.open_binlog(ln, nullptr, max_binlog_size, true, true, true,
+                               nullptr)) ||
+        (!consistent_recovery_consensus_recovery &&
+         relay_log.open_exist_consensus_binlog(ln, max_binlog_size, true,
+                                               true))) {
+      mysql_mutex_unlock(log_lock);
+      LogErr(ERROR_LEVEL, ER_RPL_CANT_OPEN_LOG_IN_AM_INIT_INFO);
+      return 1;
+    }
+
+    mysql_mutex_unlock(log_lock);
+  }
+
+  /*
+   This checks if the repository was created before and thus there
+   will be values to be read. Please, do not move this call after
+   the handler->init_info().
+ */
+  if ((check_return = check_info()) == ERROR_CHECKING_REPOSITORY) {
+    msg = "Error checking relay log repository";
+    error = 1;
+    goto err;
+  }
+
+  if (handler->init_info()) {
+    msg = "Error reading relay log configuration";
+    error = 1;
+    goto err;
+  }
+
+  check_return = check_if_info_was_cleared(check_return);
+
+  if (check_return & REPOSITORY_EXISTS) {
+    if (read_info(handler)) {
+      msg = "Error reading relay log configuration";
+      error = 1;
+      goto err;
+    }
+  } else if (check_return ==
+                 REPOSITORY_DOES_NOT_EXIST ||  // Hasn't been initialized
+             check_return ==
+                 REPOSITORY_CLEARED  // Was initialized but was RESET
+  ) {
+    group_relay_log_name[0] = 0;
+    group_relay_log_pos = 0;
+    event_relay_log_name[0] = 0;
+    event_relay_log_pos = 0;
+    group_master_log_name[0] = 0;
+    group_master_log_pos = 0;
+  }
+
+  inited = true;
+  error_on_rli_init_info = false;
+
+  if (count_relay_log_space()) {
+    msg = "Error counting relay log space";
+    error = 1;
+    goto err;
+  }
+
+  return error;
+
+err:
+  handler->end_info();
+  inited = false;
+  error_on_rli_init_info = true;
+  if (msg) LogErr(ERROR_LEVEL, ER_RPL_AM_INIT_INFO_MSG, msg);
+  relay_log.close(LOG_CLOSE_INDEX, true /*need_lock_log=true*/,
+                  true /*need_lock_index=true*/);
+  return error;
+}
+
+void Relay_log_info::cli_end_info() {
+  DBUG_TRACE;
+
+  error_on_rli_init_info = false;
+  if (!inited) return;
+
+  handler->end_info();
+
+  inited = false;
+  relay_log.close(LOG_CLOSE_INDEX, true /*need_lock_log=true*/,
+                  true /*need_lock_index=true*/);
+
+  /*
+    Delete the slave's temporary tables from memory.
+    In the future there will be other actions than this, to ensure persistence
+    of slave's temp tables after shutdown.
+  */
+  close_temporary_tables();
+}
+#endif

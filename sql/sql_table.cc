@@ -8402,6 +8402,9 @@ bool validate_comment_length(THD *thd, const char *comment_str,
 
 static bool set_table_default_charset(THD *thd, HA_CREATE_INFO *create_info,
                                       const dd::Schema &schema) {
+#ifdef WITH_SMARTENGINE
+  bool is_smartengine = (create_info->db_type->db_type == DB_TYPE_SMARTENGINE);
+#endif
   /*
     If the table character set was not given explicitly,
     let's fetch the database default character set and
@@ -8410,6 +8413,12 @@ static bool set_table_default_charset(THD *thd, HA_CREATE_INFO *create_info,
   if (create_info->default_table_charset == nullptr) {
     if (get_default_db_collation(schema, &create_info->default_table_charset))
       return true;
+#ifdef WITH_SMARTENGINE
+    /** for smartengine, if collation is 0900_ai_ci, we replace it by general_ci */
+    if (is_smartengine && create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
+      create_info->default_table_charset = &my_charset_utf8mb4_general_ci;
+    }
+#endif
   } else {
     assert((create_info->used_fields & HA_CREATE_USED_CHARSET) == 0 ||
            (create_info->used_fields & HA_CREATE_USED_DEFAULT_CHARSET) ||
@@ -8420,6 +8429,11 @@ static bool set_table_default_charset(THD *thd, HA_CREATE_INFO *create_info,
         create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
       create_info->default_table_charset =
           thd->variables.default_collation_for_utf8mb4;
+#ifdef WITH_SMARTENGINE
+      if (is_smartengine) {
+        create_info->default_table_charset = &my_charset_utf8mb4_general_ci;
+      } 
+#endif
 
       // ALTER TABLE ... CONVERT TO CHARACTER SET ...
       if (create_info->used_fields & HA_CREATE_USED_CHARSET) {
@@ -8428,8 +8442,17 @@ static bool set_table_default_charset(THD *thd, HA_CREATE_INFO *create_info,
     }
   }
 
+#ifdef WITH_SMARTENGINE
+  if (create_info->default_table_charset == nullptr) {
+    create_info->default_table_charset = thd->collation();
+    if (is_smartengine && create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
+      create_info->default_table_charset = &my_charset_utf8mb4_general_ci;
+    }
+  }
+#else
   if (create_info->default_table_charset == nullptr)
     create_info->default_table_charset = thd->collation();
+#endif
 
   return false;
 }

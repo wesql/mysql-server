@@ -27,6 +27,10 @@ ADD_DEFINITIONS(-DMYSQL_SERVER)
 ADD_DEFINITIONS(-DLOG_SUBSYSTEM_TAG="Clone")
 ADD_DEFINITIONS(-DLOG_COMPONENT_TAG="Clone")
 
+MY_ADD_COMPILE_DEFINITIONS(
+  src/clone_plugin.cc 
+  COMPILE_DEFINITIONS MYSQL_DYNAMIC_PLUGIN)
+  
 MYSQL_ADD_PLUGIN(clone
   src/clone_plugin.cc
   src/clone_client.cc
@@ -35,6 +39,5 @@ MYSQL_ADD_PLUGIN(clone
   src/clone_local.cc
   src/clone_os.cc
   src/clone_hton.cc
-  MODULE_ONLY
   MODULE_OUTPUT_NAME "mysql_clone"
   )

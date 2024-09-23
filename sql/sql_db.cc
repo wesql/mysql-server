@@ -294,13 +294,48 @@ static bool write_db_cmd_to_binlog(THD *thd, const char *db, bool trx_cache) {
 
 static void set_db_default_charset(const THD *thd,
                                    HA_CREATE_INFO *create_info) {
+#ifdef WITH_SMARTENGINE
+  bool is_smartengine = false;
+
+  if (default_storage_engine) {
+    size_t default_engine_len = strlen(default_storage_engine);
+    is_smartengine = (default_engine_len == strlen(SMARTENGINE_NAME)) &&
+      (!strncasecmp(default_storage_engine, SMARTENGINE_NAME, default_engine_len));
+  }
+
+  bool is_system_thd = (thd->is_dd_system_thread() ||
+                        thd->is_initialize_system_thread() ||
+                        thd->is_server_upgrade_thread());
+  /**smartengine support my_charset_utf8mb4_0900_ai_ci incomplete, include index scan.
+  So, smartengine change collation from my_charset_utf8mb4_0900_ai_ci to
+  my_charset_utf8mb4_general_ci, if ddl query has not an explicit collation clause.*/
+#endif
   if (create_info->default_table_charset == nullptr) {
     create_info->default_table_charset = thd->variables.collation_server;
+#ifdef WITH_SMARTENGINE
+    if (!is_system_thd && is_smartengine &&
+        create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
+      create_info->default_table_charset = &my_charset_utf8mb4_general_ci;
+    }
+#endif
   } else {
+#ifdef WITH_SMARTENGINE
     if (!(create_info->used_fields & HA_CREATE_USED_DEFAULT_COLLATE) &&
-        create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci)
+        create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
       create_info->default_table_charset =
           thd->variables.default_collation_for_utf8mb4;
+
+      if (!is_system_thd && is_smartengine &&
+          create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
+        create_info->default_table_charset = &my_charset_utf8mb4_general_ci;
+      }
+    }
+#else
+    if (!(create_info->used_fields & HA_CREATE_USED_DEFAULT_COLLATE) &&
+        create_info->default_table_charset == &my_charset_utf8mb4_0900_ai_ci) {
+      create_info->default_table_charset =
+          thd->variables.default_collation_for_utf8mb4;
+#endif
   }
 }
 

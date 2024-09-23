@@ -77,6 +77,12 @@
 
 using std::max;
 using std::min;
+#ifdef WESQL_CLUSTER
+#ifndef DBUG_OFF
+uint32 tt_guard = 0;
+uint32 pos_guard = 0;
+#endif
+#endif
 
 /**
   For storing information of the Format_description_event of the currently
@@ -775,6 +781,16 @@ Sid_map *global_sid_map = nullptr;
 Checkable_rwlock *global_sid_lock = nullptr;
 Gtid_set *gtid_set_included = nullptr;
 Gtid_set *gtid_set_excluded = nullptr;
+
+#ifdef WESQL_CLUSTER
+static ulonglong start_index = 0;
+static ulonglong stop_index = 0;
+static ulonglong current_index = 0;
+#ifndef DBUG_OFF
+static bool debug_consensuslog_revise_check;
+#endif
+#endif
+
 static uint opt_zstd_compress_level = default_zstd_compression_level;
 static char *opt_compress_algorithm = nullptr;
 
@@ -1372,13 +1388,53 @@ static Exit_status process_event(PRINT_EVENT_INFO *print_event_info,
   Exit_status retval = OK_CONTINUE;
   IO_CACHE *const head = &print_event_info->head_cache;
 
+#ifdef WESQL_CLUSTER
+#ifndef DBUG_OFF
+  if (debug_consensuslog_revise_check) {
+    uint32 tt_now = (uint32)ev->common_header->when.tv_sec;
+    if (tt_guard > tt_now + 1)  // only allow 1 sec diff
+    {
+      error("Error check timestamp, current_index %llu", current_index);
+      exit(1);
+    }
+    tt_guard = tt_now;
+    uint32 pos_now = ev->common_header->log_pos;
+    if (pos_guard >= pos_now) {
+      error(
+          "Error check position, current_index %llu, pos_guard %u, pos_now %u",
+          current_index, pos_guard, pos_now);
+      exit(1);
+    }
+    pos_guard = pos_now;
+  }
+#endif
+
+  if (ev_type == binary_log::CONSENSUS_LOG_EVENT)
+  {
+    Consensus_log_event* cev= (Consensus_log_event*)ev;
+    current_index = cev->get_index();
+  }
+  else if (ev_type == binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT)
+  {
+    Previous_consensus_index_log_event* pcev= (Previous_consensus_index_log_event*)ev;
+    current_index = pcev->get_index();
+  }
+#endif
+
   /*
     Format events are not concerned by --offset and such, we always need to
     read them to be able to process the wanted events.
   */
+#ifdef WESQL_CLUSTER
+  if (((rec_count >= offset) &&
+       ((my_time_t)(ev->common_header->when.tv_sec) >= start_datetime) &&
+       (current_index >= start_index)) ||
+      (ev_type == binary_log::FORMAT_DESCRIPTION_EVENT)) {
+#else
   if (((rec_count >= offset) &&
        ((my_time_t)(ev->common_header->when.tv_sec) >= start_datetime)) ||
       (ev_type == binary_log::FORMAT_DESCRIPTION_EVENT)) {
+#endif
     if (ev_type != binary_log::FORMAT_DESCRIPTION_EVENT) {
       /*
         We have found an event after start_datetime, from now on print
@@ -1409,7 +1465,12 @@ static Exit_status process_event(PRINT_EVENT_INFO *print_event_info,
     }
 
     // reached stop time
+#ifdef WESQL_CLUSTER
+    if (((my_time_t)(ev->common_header->when.tv_sec) >= stop_datetime) ||
+        (pos >= stop_position_mot) || (current_index >= stop_index)) {
+#else
     if (((my_time_t)(ev->common_header->when.tv_sec) >= stop_datetime)) {
+#endif
       /* end the program */
       retval = OK_STOP;
       goto end;
@@ -1846,6 +1907,12 @@ static struct my_option my_long_options[] = {
     {"debug-info", OPT_DEBUG_INFO, "Print some debug info at exit.",
      &debug_info_flag, &debug_info_flag, nullptr, GET_BOOL, NO_ARG, 0, 0, 0,
      nullptr, 0, nullptr},
+#ifdef WESQL_CLUSTER
+    {"debug-consensuslog-revise-check", OPT_DEBUG_CONSENSUSLOG_REVISE_CHECK,
+     "check timestamp and postion after consensuslog revise",
+     &debug_consensuslog_revise_check, &debug_consensuslog_revise_check, 0,
+     GET_BOOL, NO_ARG, 0, 0, 0, 0, 0, 0},
+#endif
 #endif
     {"default_auth", OPT_DEFAULT_AUTH,
      "Default authentication client-side plugin to use.", &opt_default_auth,
@@ -1979,6 +2046,13 @@ static struct my_option my_long_options[] = {
      BIN_LOG_HEADER_SIZE, BIN_LOG_HEADER_SIZE,
      /* COM_BINLOG_DUMP accepts only 4 bytes for the position */
      (ulonglong)(~(uint64)0), nullptr, 0, nullptr},
+#ifdef WESQL_CLUSTER
+    {"start-index", OPT_START_INDEX,
+     "Start reading the binlog at index N. Applies to the first binlog "
+     "passed on the command line.",
+     &start_index, &start_index, 0, GET_ULL, REQUIRED_ARG,
+     0, 0, INT_MAX64, 0, 0, 0},
+#endif
     {"stop-datetime", OPT_STOP_DATETIME,
      "Stop reading the binlog at first event having a datetime equal or "
      "posterior to the argument; the argument must be a date and time "
@@ -2013,6 +2087,13 @@ static struct my_option my_long_options[] = {
      &stop_position, &stop_position, nullptr, GET_ULL, REQUIRED_ARG,
      (longlong)(~(my_off_t)0), BIN_LOG_HEADER_SIZE, (ulonglong)(~(my_off_t)0),
      nullptr, 0, nullptr},
+#ifdef WESQL_CLUSTER
+    {"stop-index", OPT_STOP_INDEX,
+     "Stop reading the binlog at index N. Applies to the last binlog "
+     "passed on the command line.",
+     &stop_index, &stop_index, 0, GET_ULL, REQUIRED_ARG,
+     INT_MAX64, 0, INT_MAX64, 0, 0, 0},
+#endif
     {"to-last-log", 't',
      "Requires -R. Will not stop at the end of the "
      "requested binlog but rather continue printing until the end of the last "

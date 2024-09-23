@@ -50,6 +50,27 @@ class Basic_istream {
   virtual ~Basic_istream() = default;
 };
 
+#ifdef WESQL_CLUSTER
+/**
+   The abstract class for input streams which are based on IO_CACHE.
+*/
+class IO_cache_istream : public Basic_istream {
+ public:
+  IO_cache_istream(IO_CACHE *io_cache) : m_io_cache(io_cache) {}
+
+  /* Open the stream. Reinit IO_CACHE. */
+  bool open();
+
+  /* Closes the stream. */
+  void close() {}
+
+  ssize_t read(unsigned char *buffer, size_t length) override;
+
+ private:
+  IO_CACHE *m_io_cache;
+};
+#endif
+
 /**
    The abstract class for seekable input streams which have fixed length
    and provide seek operation.
@@ -119,7 +140,6 @@ class IO_CACHE_istream : public Basic_seekable_istream {
      Get the length of the file.
   */
   my_off_t length() override;
-
  private:
   IO_CACHE m_io_cache;
 };

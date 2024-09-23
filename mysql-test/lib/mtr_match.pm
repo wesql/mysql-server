@@ -30,7 +30,7 @@ package mtr_match;
 use strict;
 
 use base qw(Exporter);
-our @EXPORT = qw(mtr_match_prefix mtr_match_extension mtr_match_substring);
+our @EXPORT = qw(mtr_match_prefix mtr_match_suffix mtr_match_extension mtr_match_substring);
 
 # Match a prefix and return what is after the prefix
 sub mtr_match_prefix ($$) {
@@ -44,6 +44,19 @@ sub mtr_match_prefix ($$) {
     return undef;                        # NULL
   }
 }
+
+# Match a suffix and return what is before the suffix
+sub mtr_match_suffix ($$) {
+  my $string = shift;
+  my $suffix = shift;
+
+  if ($string =~ /^(.*)\Q$suffix\E$/) {
+    return $1;
+  } else {
+    return undef;                        # NULL
+  }
+}
+
 
 # Match extension and return the name without extension
 sub mtr_match_extension ($$) {

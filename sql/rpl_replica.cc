@@ -650,6 +650,21 @@ bool start_slave(THD *thd) {
       }
     }
   }
+
+#ifdef WESQL_CLUSTER
+  if (is_consensus_replication_enabled() &&
+      is_consensus_replication_applier_running() &&
+      (thd->lex->slave_thd_opt &&
+       (thd->lex->slave_thd_opt & SLAVE_IO) != SLAVE_IO)) {
+    mi = channel_map.get_mi(
+        channel_map.get_consensus_replication_applier_channel());
+    assert(mi && Master_info::is_configured(mi));
+    if (start_slave(thd, &thd->lex->slave_connection, &thd->lex->mi,
+                    thd->lex->slave_thd_opt, mi, true))
+      return true;
+  }
+#endif
+
   if (!error) {
     /* no error */
     my_ok(thd);
@@ -696,6 +711,24 @@ int stop_slave(THD *thd) {
       }
     }
   }
+
+#ifdef WESQL_CLUSTER
+  // stop consensus channel STOP SLAVE SQL_THREAD
+  if (is_consensus_replication_enabled() &&
+      is_consensus_replication_applier_running() &&
+      (thd->lex->slave_thd_opt &&
+       (thd->lex->slave_thd_opt & SLAVE_IO) != SLAVE_IO)) {
+    mi = channel_map.get_mi(
+        channel_map.get_consensus_replication_applier_channel());
+    assert(mi && Master_info::is_configured(mi));
+    if (stop_slave(thd, mi, true, false /*for_one_channel*/,
+                   &push_temp_table_warning)) {
+      LogErr(ERROR_LEVEL, ER_RPL_REPLICA_CANT_STOP_REPLICA_FOR_CHANNEL,
+             mi->get_channel());
+      error = 1;
+    }
+  }
+#endif
 
   if (!error) {
     /* no error */
@@ -789,6 +822,26 @@ bool start_slave_cmd(THD *thd) {
                mi->get_channel());
       goto err;
     }
+
+#ifdef WESQL_CLUSTER
+    /*
+      For channel consensus_replication_applier we disable START SLAVE [IO_THREAD]
+      command.
+    */
+    if (mi && is_consensus_replication_enabled() &&
+        channel_map.is_consensus_replication_channel_name(mi->get_channel()) &&
+        (!is_consensus_replication_applier_running() ||
+         !thd->lex->slave_thd_opt || (thd->lex->slave_thd_opt & SLAVE_IO))) {
+      const char *command = "START SLAVE FOR CHANNEL";
+      if (thd->lex->slave_thd_opt & SLAVE_IO)
+        command = "START SLAVE IO_THREAD FOR CHANNEL";
+
+      my_error(ER_REPLICA_CHANNEL_OPERATION_NOT_ALLOWED, MYF(0), command,
+               mi->get_channel(), command);
+
+      goto err;
+    }
+#endif
 
     if (mi)
       res = start_slave(thd, &thd->lex->slave_connection, &thd->lex->mi,
@@ -889,6 +942,27 @@ bool stop_slave_cmd(THD *thd) {
       channel_map.unlock();
       return true;
     }
+
+#ifdef WESQL_CLUSTER
+    /*
+      For channel consensus_replication_applier we disable START SLAVE [IO_THREAD]
+      command.
+    */
+    if (mi && is_consensus_replication_enabled() &&
+        channel_map.is_consensus_replication_channel_name(mi->get_channel()) &&
+        (!is_consensus_replication_applier_running() ||
+         !thd->lex->slave_thd_opt || (thd->lex->slave_thd_opt & SLAVE_IO))) {
+      const char *command = "STOP SLAVE FOR CHANNEL";
+      if (thd->lex->slave_thd_opt & SLAVE_IO)
+        command = "STOP SLAVE SQL_THREAD FOR CHANNEL";
+
+      my_error(ER_REPLICA_CHANNEL_OPERATION_NOT_ALLOWED, MYF(0), command,
+               mi->get_channel(), command);
+
+      channel_map.unlock();
+      return true;
+    }
+#endif
 
     if (mi)
       res = stop_slave(thd, mi, true /*net report */, true /*for_one_channel*/,
@@ -2205,6 +2279,24 @@ void delete_slave_info_objects() {
       it->second = 0;
     }
   }
+
+#ifdef WESQL_CLUSTER
+  // Clean other types of channel
+  if (is_consensus_replication_enabled()) {
+    for (mi_map::iterator it = channel_map.begin(CONSENSUS_REPLICATION_CHANNEL);
+         it != channel_map.end(CONSENSUS_REPLICATION_CHANNEL); it++) {
+      mi = it->second;
+
+      if (mi) {
+        mi->channel_wrlock();
+        end_info(mi);
+        if (mi->rli) delete mi->rli;
+        delete mi;
+        it->second = 0;
+      }
+    }
+  }
+#endif
 
   channel_map.unlock();
 }
@@ -4360,6 +4452,11 @@ static int sql_delay_event(Log_event *ev, THD *thd, Relay_log_info *rli) {
       */
       if (type != binary_log::ROTATE_EVENT &&
           type != binary_log::FORMAT_DESCRIPTION_EVENT &&
+#ifdef WESQL_CLUSTER
+          !ev->is_consensus_event() &&
+          (!rli->relay_log.is_consensus_write ||
+           ev->get_type_code() != binary_log::ROTATE_EVENT) &&
+#endif
           type != binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
         // Calculate when we should execute the event.
         sql_delay_end = ev->common_header->when.tv_sec +
@@ -4722,6 +4819,12 @@ apply_event_and_update_pos(Log_event **ptr_ev, THD *thd, Relay_log_info *rli) {
     if (!error && rli->is_mts_recovery() &&
         ev->get_type_code() != binary_log::ROTATE_EVENT &&
         ev->get_type_code() != binary_log::FORMAT_DESCRIPTION_EVENT &&
+#ifdef WESQL_CLUSTER
+        ev->get_type_code() != binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT &&
+        ev->get_type_code() != binary_log::CONSENSUS_LOG_EVENT &&
+        ev->get_type_code() != binary_log::CONSENSUS_CLUSTER_INFO_EVENT &&
+        ev->get_type_code() != binary_log::CONSENSUS_EMPTY_EVENT &&
+#endif
         ev->get_type_code() != binary_log::PREVIOUS_GTIDS_LOG_EVENT) {
       if (ev->starts_group()) {
         rli->mts_recovery_group_seen_begin = true;
@@ -4961,6 +5064,11 @@ static int exec_relay_log_event(THD *thd, Relay_log_info *rli,
     */
     if ((!rli->is_parallel_exec() || rli->last_master_timestamp == 0) &&
         !(ev->is_artificial_event() || ev->is_relay_log_event() ||
+#ifdef WESQL_CLUSTER
+          ev->is_consensus_event() ||
+          (!rli->relay_log.is_consensus_write &&
+           ev->get_type_code() == binary_log::ROTATE_EVENT) ||
+#endif
           ev->get_type_code() == binary_log::FORMAT_DESCRIPTION_EVENT ||
           ev->server_id == 0)) {
       rli->last_master_timestamp =
@@ -5019,6 +5127,10 @@ static int exec_relay_log_event(THD *thd, Relay_log_info *rli,
         */
         return 1;
     }
+
+#ifdef WESQL_CLUSTER
+    RUN_HOOK(binlog_applier, before_apply_event, (rli, ev));
+#endif
 
     /* ptr_ev can change to NULL indicating MTS coorinator passed to a Worker */
     exec_res = apply_event_and_update_pos(ptr_ev, thd, rli);
@@ -6023,6 +6135,10 @@ static void *handle_slave_worker(void *arg) {
 
   thd->variables.require_row_format = rli->is_row_format_required();
 
+#ifdef WESQL_CLUSTER
+  if (RUN_HOOK(binlog_applier, before_start, (w, 0))) goto err;
+#endif
+
   if (Relay_log_info::PK_CHECK_STREAM !=
       rli->get_require_table_primary_key_check())
     thd->variables.sql_require_primary_key =
@@ -6103,6 +6219,10 @@ static void *handle_slave_worker(void *arg) {
   assert(rli->mts_pending_jobs_size < rli->mts_pending_jobs_size_max);
 
   mysql_mutex_unlock(&rli->pending_jobs_lock);
+
+#ifdef WESQL_CLUSTER
+  if (RUN_HOOK(binlog_applier, after_stop, (w))) goto err;
+#endif
 
   /*
      In MTS case cleanup_after_session() has be called explicitly.
@@ -6185,6 +6305,16 @@ bool mts_recovery_groups(Relay_log_info *rli) {
   bool flag_group_seen_begin = false;
   uint recovery_group_cnt = 0;
   bool not_reached_commit = true;
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_applier)) {
+    bool exit = false;
+    if (RUN_HOOK(binlog_applier, on_mts_recovery_groups, (rli, exit))) {
+      is_error = true;
+    }
+    if (is_error || exit) return is_error;
+  }
+#endif
 
   // Value-initialization, to avoid compiler warnings on push_back.
   Slave_job_group job_worker = Slave_job_group();
@@ -6509,6 +6639,10 @@ bool mta_checkpoint_routine(Relay_log_info *rli, bool force) {
 
   if (rli->gaq->lwm.group_relay_log_name[0] != 0)
     rli->set_group_relay_log_name(rli->gaq->lwm.group_relay_log_name);
+
+#ifdef WESQL_CLUSTER
+  (void)RUN_HOOK(binlog_applier, on_checkpoint_routine, (rli));
+#endif
 
   /*
      todo: uncomment notifies when UNTIL will be supported
@@ -7090,6 +7224,18 @@ extern "C" void *handle_slave_sql(void *arg) {
       goto err;
     }
 
+#ifdef WESQL_CLUSTER
+    if (RUN_HOOK(binlog_applier, before_start,
+                 (rli, rli->opt_replica_parallel_workers))) {
+      mysql_cond_broadcast(&rli->start_cond);
+      mysql_mutex_unlock(&rli->run_lock);
+      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
+                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
+                  "Failed to run 'start' hook");
+      goto err;
+    }
+#endif
+
     /* MTS: starting the worker pool */
     if (slave_start_workers(rli, rli->opt_replica_parallel_workers,
                             &mts_inited) != 0) {
@@ -7158,6 +7304,15 @@ extern "C" void *handle_slave_sql(void *arg) {
     mysql_mutex_unlock(&rli->log_space_lock);
     rli->trans_retries = 0;  // start from "no error"
     DBUG_PRINT("info", ("rli->trans_retries: %lu", rli->trans_retries));
+
+#ifdef WESQL_CLUSTER
+    if (RUN_HOOK(binlog_applier, reader_before_open, (rli, &applier_reader))) {
+      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
+                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
+                  "Failed to run 'open_applier_reader' hook");
+      goto err;
+    }
+#endif
 
     if (applier_reader.open(&errmsg)) {
       rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR, "%s", errmsg);
@@ -7261,8 +7416,22 @@ extern "C" void *handle_slave_sql(void *arg) {
         saved_skip = 0;
       }
 
+#ifdef WESQL_CLUSTER
+      bool applier_stop = false;
+      (void)RUN_HOOK(binlog_applier, before_read_next_event,
+                     (rli, applier_stop));
+      if (applier_stop) break;
+#endif
+
       // read next event
       mysql_mutex_lock(&rli->data_lock);
+#ifdef WESQL_CLUSTER
+      if (RUN_HOOK(binlog_applier, reader_before_read_event,
+                   (rli, &applier_reader))) {
+        mysql_mutex_unlock(&rli->data_lock);
+        break;
+      }
+#endif
       ev = applier_reader.read_next_event();
       mysql_mutex_unlock(&rli->data_lock);
 
@@ -7315,6 +7484,14 @@ extern "C" void *handle_slave_sql(void *arg) {
         binlog_relay_io, applier_stop,
         (thd, rli->mi, rli->is_error() || !rli->sql_thread_kill_accepted));
 
+#ifdef WESQL_CLUSTER
+    if (RUN_HOOK(binlog_applier, reader_before_close, (rli, &applier_reader))) {
+      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
+                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
+                  "Failed to run 'before_close_reader' hook");
+    }
+#endif
+
     slave_stop_workers(rli, &mts_inited);  // stopping worker pool
     /* Thread stopped. Print the current replication position to the log */
     if (slave_errno)
@@ -7328,6 +7505,14 @@ extern "C" void *handle_slave_sql(void *arg) {
     delete rli->current_mts_submode;
     rli->current_mts_submode = nullptr;
     rli->clear_mts_recovery_groups();
+
+#ifdef WESQL_CLUSTER
+    if (RUN_HOOK(binlog_applier, after_stop, (rli))) {
+      rli->report(ERROR_LEVEL, ER_REPLICA_FATAL_ERROR,
+                  ER_THD(thd, ER_REPLICA_FATAL_ERROR),
+                  "Failed to run 'after_stop' hook");
+    }
+#endif
 
     /*
       Some events set some playgrounds, which won't be cleared because thread
@@ -8638,6 +8823,14 @@ int flush_relay_logs(Master_info *mi, THD *thd) {
   if (mi) {
     Relay_log_info *rli = mi->rli;
     if (rli->inited) {
+#ifdef WESQL_CLUSTER
+      if (is_consensus_replication_enabled() &&
+          channel_map.is_consensus_replication_channel_name(
+              mi->get_channel())) {
+        return 0;
+      }
+#endif
+
       // Rotate immediately if one is true:
       if ((!is_group_replication_plugin_loaded() ||  // GR is disabled
            !mi->transaction_parser
@@ -9330,6 +9523,16 @@ bool reset_slave_cmd(THD *thd) {
       channel_map.unlock();
       return true;
     }
+
+#ifdef WESQL_CLUSTER
+    if (mi && is_consensus_replication_enabled() &&
+        channel_map.is_consensus_replication_channel_name(mi->get_channel())) {
+      my_error(ER_REPLICA_CHANNEL_OPERATION_NOT_ALLOWED, MYF(0),
+               "RESET SLAVE [ALL] FOR CHANNEL", mi->get_channel());
+      channel_map.unlock();
+      return true;
+    }
+#endif
 
     if (mi)
       res = reset_slave(thd, mi, thd->lex->reset_slave_info.all);
@@ -10996,6 +11199,14 @@ bool change_master_cmd(THD *thd) {
     res = true;
     goto err;
   }
+
+#ifdef WESQL_CLUSTER
+  if (channel_map.is_consensus_replication_channel_name(lex->mi.channel)) {
+    my_error(ER_REPLICA_CHANNEL_NAME_INVALID_OR_TOO_LONG, MYF(0));
+    res = true;
+    goto err;
+  }
+#endif
 
   if (channel_map.is_group_replication_channel_name(lex->mi.channel, true)) {
     /*

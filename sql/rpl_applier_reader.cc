@@ -261,6 +261,14 @@ bool Rpl_applier_reader::read_active_log_end_pos() {
   return false;
 }
 
+#ifdef WESQL_CLUSTER
+bool Rpl_applier_reader::reload_active_log_end_pos() {
+  m_log_end_pos = m_rli->relay_log.get_binlog_end_pos();
+  m_reading_active_log = m_rli->relay_log.is_active(m_linfo.log_file_name);
+  return reopen_log_reader_if_needed();
+}
+#endif
+
 Rotate_log_event *Rpl_applier_reader::generate_rotate_event() {
   DBUG_TRACE;
   Rotate_log_event *ev = nullptr;
@@ -341,6 +349,11 @@ bool Rpl_applier_reader::reopen_log_reader_if_needed() {
 
     my_off_t pos = m_relaylog_file_reader.position();
     m_relaylog_file_reader.close();
+#ifdef WESQL_CLUSTER
+    if (m_rli->info_thd->consensus_context.consensus_replication_applier) {
+      if (m_relaylog_file_reader.open(m_linfo.log_file_name, pos)) return true;
+    } else
+#endif
     if (m_relaylog_file_reader.open(m_linfo.log_file_name) ||
         m_relaylog_file_reader.seek(pos))
       return true;
@@ -415,6 +428,10 @@ bool Rpl_applier_reader::purge_applied_logs() {
   mysql_mutex_assert_owner(&m_rli->data_lock);
 
   if (!relay_log_purge) return false;
+
+#ifdef WESQL_CLUSTER
+  if (!m_rli->relay_log.is_relay_log) return false;
+#endif
 
   // lock BACKUP lock for the duration of PURGE operation
   Shared_backup_lock_guard backup_lock{current_thd};

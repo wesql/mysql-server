@@ -328,8 +328,14 @@ sub create_disabled_test_list($$) {
   my @disabled_collection = $opt_skip_test_list if $opt_skip_test_list;
 
   # Add 'disabled.def' files.
-  unshift(@disabled_collection,
-          "$::glob_mysql_test_dir/collections/disabled.def");
+  if ($::opt_consensus_cluster) {
+    unshift(@disabled_collection,
+      "$::glob_mysql_test_dir/collections/disabled-wesql.def");
+  } else {
+    unshift(@disabled_collection,
+      "$::glob_mysql_test_dir/collections/disabled.def");
+  }
+
 
   # Add internal 'disabled.def' file only if it exists
   my $internal_disabled_def_file =
@@ -512,7 +518,7 @@ sub collect_test_cases ($$$$) {
       foreach my $test (@$cases) {
         last unless $opt_reorder;
         # 'test->{name}' value is always in suite.name format
-        if ($test->{name} =~ /^$sname.*\.$tname$/) {
+        if ($test->{name} =~ /^$sname.*\.$tname$/ or $test->{name} =~ /^$sname.*\.$tname-wesql$/) {
           $found = 1;
           last;
         }
@@ -862,6 +868,17 @@ sub collect_one_suite($$$$) {
         next if (!-f $full_name);
       }
 
+      my $wesql_case = mtr_match_suffix($tname, "-wesql");
+      if (!$::opt_consensus_cluster) {
+        # skip *-wesql.test
+        next if (defined $wesql_case);
+      } elsif (not defined $wesql_case) {
+        my $wesql_full_name = "$testdir/$tname-wesql.$extension";
+        # replace if $tname-wesql.test exists
+        mtr_verbose("Replace tname $tname with $tname-wesql");
+        ($tname = $tname . "-wesql") if (-f $wesql_full_name);
+      }
+
       push(@cases,
            collect_one_test_case($suitedir, $testdir,
                                  $resdir,   $suite,
@@ -878,6 +895,15 @@ sub collect_one_suite($$$$) {
 
       # Skip tests that does not match the --do-test= filter
       next if ($do_test_reg and not $tname =~ /$do_test_reg/o);
+
+      my $wesql_case = mtr_match_suffix($tname, "-wesql");
+      if (!$::opt_consensus_cluster) {
+        # skip wesql-*.test
+        next if (defined $wesql_case);
+      } elsif (not defined $wesql_case) {
+        # skip if wesql-$tname.test exists
+        next if (-f "$testdir/$tname-wesql.test");
+      }
 
       push(@cases,
            collect_one_test_case($suitedir, $testdir, $resdir,
@@ -1149,6 +1175,8 @@ sub collect_one_test_case {
   my $filename   = shift;
   my $disabled   = shift;
   my $suite_opts = shift;
+  my $wesql_tname = undef;
+  my $wesql_fname = undef;
 
   # Test file name should consist of only alpha-numeric characters, dash (-)
   # or underscore (_), but should not start with dash or underscore.
@@ -1173,18 +1201,28 @@ sub collect_one_test_case {
                             path      => "$testdir/$filename",
                             shortname => $tname,);
 
+  # After this, tname will remove -wesql suffix
+  $wesql_tname = mtr_match_suffix($tname, "-wesql");
+  if ($::opt_consensus_cluster && defined $wesql_tname) {
+    $wesql_fname = $tname;
+    $tname = $wesql_tname;
+  }
+
   my $result_file = "$resdir/$tname.result";
-  if (-f $result_file) {
+  my $wesql_result_file = "$resdir/$tname-wesql.result";
+  if ($::opt_consensus_cluster && -f $wesql_result_file) {
+    $tinfo->{result_file} = $wesql_result_file;
+  } elsif (-f $result_file) {
     $tinfo->{result_file} = $result_file;
   } else {
     # Result file doesn't exist
     if ($::opt_check_testcases and !$::opt_record) {
       # Set 'no_result_file' flag if check-testcases is enabled.
-      $tinfo->{'no_result_file'} = $result_file;
+      $tinfo->{'no_result_file'} = $::opt_consensus_cluster ? $wesql_result_file : $result_file;
     } else {
       # No .result file exist, remember the path where it should
       # be saved in case of --record.
-      $tinfo->{record_file} = $result_file;
+      $tinfo->{record_file} = $::opt_consensus_cluster ? $wesql_result_file : $result_file;
     }
   }
 
@@ -1213,6 +1251,9 @@ sub collect_one_test_case {
 
   # Check for group replication tests
   $tinfo->{'grp_rpl_test'} = 1 if ($suitename =~ 'group_replication');
+
+  # Check for group replication tests
+  $tinfo->{'consensus_replication_test'} = 1 if ($suitename =~ 'consensus_replication');
 
   # Check for disabled tests
   if ($disabled->{"$suitename.$tname"}) {
@@ -1269,7 +1310,11 @@ sub collect_one_test_case {
   mtr_error("$tname: slave-mi not supported anymore")
     if (-f "$testdir/$tname.slave-mi");
 
-  tags_from_test_file($tinfo, "$testdir/${tname}.test");
+  if (defined $wesql_fname) {
+    tags_from_test_file($tinfo, "$testdir/${wesql_fname}.test");
+  } else {
+    tags_from_test_file($tinfo, "$testdir/${tname}.test");
+  }
 
   # Check that test wth "ndb" in their suite name
   # have been tagged as 'ndb_test', this is normally fixed
@@ -1384,6 +1429,17 @@ sub collect_one_test_case {
       skip_test($tinfo, "No replication tests, --skip-rpl is enabled.");
       return $tinfo;
     }
+    if ($::opt_consensus_cluster && $::opt_consensus_replication) {
+      skip_test($tinfo, "No replication tests, --consensus_replication is enabled.");
+      return $tinfo;
+    }
+  }
+
+  if ($tinfo->{'consensus_replication_test'}) {
+    if (!$::opt_consensus_cluster || !$::opt_consensus_replication) {
+      skip_test($tinfo, "No consensus_replication tests, --consensus_replication is disabled.");
+      return $tinfo;
+    }
   }
 
   # Check for group replication tests
@@ -1428,11 +1484,20 @@ sub collect_one_test_case {
   }
 
   if (!$::start_only or @::opt_cases) {
-    # Add master opts, extra options only for master
-    process_opts_file($tinfo, "$testdir/$tname-master.opt", 'master_opt');
+    if (-f "$testdir/$tname-master-wesql.opt" || -f "$testdir/$tname-slave-wesql.opt") {
+      if (-f "$testdir/$tname-master-wesql.opt") {
+          process_opts_file($tinfo, "$testdir/$tname-master-wesql.opt", 'master_opt');
+      }
 
-    # Add slave opts, list of extra option only for slave
-    process_opts_file($tinfo, "$testdir/$tname-slave.opt", 'slave_opt');
+      if (-f "$testdir/$tname-slave-wesql.opt") {
+          process_opts_file($tinfo, "$testdir/$tname-slave-wesql.opt", 'slave_opt');
+      }
+    } else {
+        # Add master opts, extra options only for master
+        process_opts_file($tinfo, "$testdir/$tname-master.opt", 'master_opt');
+        # Add slave opts, list of extra option only for slave
+        process_opts_file($tinfo, "$testdir/$tname-slave.opt", 'slave_opt');
+    }
   }
 
   if (!$::start_only) {
@@ -1513,6 +1578,10 @@ my @tags = (
   # Tests with below .inc file are considered to be group replication tests
   [ "have_group_replication_plugin_base.inc", "grp_rpl_test", 1 ],
   [ "have_group_replication_plugin.inc",      "grp_rpl_test", 1 ],
+
+  # Tests with below .inc file are considered to be consensus_replication tests
+  [ "include/paxos.inc", "consensus_replication_test", 1 ],
+  [ "include/not_log_bin.inc", "not_log_bin", 1 ],
 
   # Tests with below .inc file needs either big-test or only-big-test
   # option along with valgrind option.

@@ -1482,6 +1482,280 @@ The following options may be given as the first argument:
  Log slow queries to given log file. Defaults logging to
  hostname-slow.log. Must be enabled to activate other slow
  log options
+ --smartengine[=name] 
+ Enable or disable SMARTENGINE plugin. Possible values are
+ ON, OFF, FORCE (don't start if the plugin fails to load).
+ --smartengine-auto-shrink-enabled 
+ DBOptions::auto_shrink_enabled for SE
+ (Defaults to on; use --skip-smartengine-auto-shrink-enabled to disable.)
+ --smartengine-auto-shrink-schedule-interval=# 
+ DBOptions::auto_shrink_schedule_interval for SE
+ --smartengine-base-background-compactions=# 
+ DBOptions::base_background_compactions for SE
+ --smartengine-batch-group-max-group-size=# 
+ DBOptions::batch_group_max_group_size for SE
+ --smartengine-batch-group-max-leader-wait-time-us=# 
+ DBOptions::batch_group_max_leader_wait_time_us for SE
+ --smartengine-batch-group-slot-array-size=# 
+ DBOptions::batch_group_slot_array_size for SE
+ --smartengine-block-cache-size=# 
+ block_cache size for SE
+ --smartengine-block-size=# 
+ BlockBasedTableOptions::block_size for SE
+ --smartengine-bottommost-level=# 
+ CFOptions::bottommost_level for SE
+ --smartengine-bulk-load-size=# 
+ Max #records in a batch for bulk-load mode
+ --smartengine-cfstats[=name] 
+ Enable or disable SMARTENGINE_CFSTATS plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-columns[=name] 
+ Enable or disable SMARTENGINE_COLUMNS plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-compact-cf=# 
+ Compact sub table
+ --smartengine-compaction-delete-percent=# 
+ CFOptions::compaction_delete_percent for SE
+ --smartengine-compaction-history[=name] 
+ Enable or disable SMARTENGINE_COMPACTION_HISTORY plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-compaction-mode=# 
+ DBOptions::compaction_mode for SE
+ --smartengine-compaction-stats[=name] 
+ Enable or disable SMARTENGINE_COMPACTION_STATS plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-compaction-task[=name] 
+ Enable or disable SMARTENGINE_COMPACTION_TASK plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-compaction-task-extents-limit=# 
+ CFOptions::compaction_task_extents_limit for SE
+ --smartengine-compaction-type=# 
+ DBOptions::compaction_type for SE
+ --smartengine-compression-options=name 
+ CFOptions::compression_opts for SE
+ --smartengine-compression-per-level=name 
+ CFOptions::compression_per_level for SE
+ --smartengine-concurrent-writable-file-buffer-num=# 
+ DBOptions::concurrent_writable_file_buffer_num for SE
+ --smartengine-concurrent-writable-file-buffer-switch-limit=# 
+ DBOptions::concurrent_writable_file_buffer_switch_limit
+ for SE
+ --smartengine-concurrent-writable-file-single-buffer-size=# 
+ DBOptions::concurrent_writable_file_single_buffer_size
+ for SE
+ --smartengine-cpu-compaction-thread-num=# 
+ DBOptions::cpu_compaction_thread_num for SE
+ --smartengine-datadir[=name] 
+ SE data directory
+ --smartengine-db-total-write-buffer-size=# 
+ DBOptions::db_total_write_buffer_size for SE
+ --smartengine-db-write-buffer-size=# 
+ DBOptions::db_write_buffer_size for SE
+ --smartengine-dbstats[=name] 
+ Enable or disable SMARTENGINE_DBSTATS plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-ddl[=name] 
+ Enable or disable SMARTENGINE_DDL plugin. Possible values
+ are ON, OFF, FORCE (don't start if the plugin fails to
+ load).
+ --smartengine-deadlock-detect 
+ Enables deadlock detection
+ --smartengine-debug-info[=name] 
+ Enable or disable SMARTENGINE_DEBUG_INFO plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-disable-auto-compactions 
+ CFOptions::disable_auto_compaction for SE
+ --smartengine-disable-instant-ddl 
+ disable instant ddl feature if necessary.
+ --smartengine-disable-online-ddl=# 
+ disable online ddl feature if necessary.0: not disable
+ online ddl,1: disable online-rebuild ddl, like modify
+ pk,2: disable all type online-ddl include
+ rebuild/norebuild
+ --smartengine-disable-parallel-ddl 
+ disable parall ddl feature if necessary.
+ --smartengine-dump-malloc-stats 
+ DBOptions::dump_malloc_stats for se
+ --smartengine-dump-memtable-limit-size=# 
+ DBOptions::dump_memtable_limit_size for SE
+ --smartengine-enable-2pc 
+ Enable two phase commit for SE
+ (Defaults to on; use --skip-smartengine-enable-2pc to disable.)
+ --smartengine-estimate-cost-depth=# 
+ DBOptions::estimate_cost_depth for SE
+ --smartengine-flush-delete-percent=# 
+ CFOptions::flush_delete_percent for SE
+ --smartengine-flush-delete-percent-trigger=# 
+ CFOptions::flush_delete_percent_trigger for SE
+ --smartengine-flush-delete-record-trigger=# 
+ CFOptions::flush_delete_record_trigger for SE
+ --smartengine-flush-log-at-trx-commit=# 
+ Sync on transaction commit. Similar to
+ innodb_flush_log_at_trx_commit. 1: sync on commit, 0: not
+ sync until wal_bytes_per_sync, 2: sync per second
+ --smartengine-force-flush-memtable-now 
+ Forces memstore flush which may block all write requests
+ so be careful
+ --smartengine-fpga-compaction-thread-num=# 
+ DBOptions::fpga_compaction_thread_num for SE
+ --smartengine-global-info[=name] 
+ Enable or disable SMARTENGINE_GLOBAL_INFO plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-hotbackup=name 
+ Hot Backup
+ --smartengine-idle-tasks-schedule-time=# 
+ DBOptions::idle_tasks_schedule_time for SE
+ --smartengine-index-file-map[=name] 
+ Enable or disable SMARTENGINE_INDEX_FILE_MAP plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-level-compaction-dynamic-level-bytes 
+ CFOptions::level_compaction_dynamic_level_bytes for SE
+ (Defaults to on; use --skip-smartengine-level-compaction-dynamic-level-bytes to disable.)
+ --smartengine-level0-file-num-compaction-trigger=# 
+ CFOptions::level0_file_num_compaction_trigger for SE
+ --smartengine-level0-layer-num-compaction-trigger=# 
+ CFOptions::level0_layer_num_compaction_trigger for SE
+ --smartengine-level1-extents-major-compaction-trigger=# 
+ CFOptions::level1_extents_major_compaction_trigger for SE
+ --smartengine-level2-usage-percent=# 
+ CFOptions::level2_usage_percent for SE
+ --smartengine-lock-scanned-rows 
+ Take and hold locks on rows that are scanned but not
+ updated
+ --smartengine-lock-wait-timeout=# 
+ Number of seconds to wait for lock
+ --smartengine-locks[=name] 
+ Enable or disable SMARTENGINE_LOCKS plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-master-thread-monitor-interval-ms[=#] 
+ DBOptions::master_thread_monitor_interval_ms for SE
+ --smartengine-max-background-compactions=# 
+ DBOptions::max_background_compactions for SE
+ --smartengine-max-background-dumps=# 
+ DBOptions::max_background_dumps for SE
+ --smartengine-max-background-flushes=# 
+ DBOptions::max_background_flushes for SE
+ --smartengine-max-free-extent-percent=# 
+ DBOptions::max_free_extent_percent for SE
+ --smartengine-max-manifest-file-size=# 
+ DBOptions::max_manifest_file_size for SE
+ --smartengine-max-row-locks=# 
+ Maximum number of locks a transaction can have
+ --smartengine-max-shrink-extent-count=# 
+ DBOptions::max_shrink_extent_count for SE
+ --smartengine-max-total-wal-size=# 
+ DBOptions::max_total_wal_size for SE
+ --smartengine-max-write-buffer-number=# 
+ CFOptions::max_write_buffer_number for SE
+ --smartengine-max-write-buffer-number-to-maintain=# 
+ CFOptions::max_write_buffer_number_to_maintain for SE
+ --smartengine-mem-alloc[=name] 
+ Enable or disable SMARTENGINE_MEM_ALLOC plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-memtable=name 
+ options for CFOptions::memtable in SE
+ --smartengine-min-write-buffer-number-to-merge=# 
+ CFOptions::min_write_buffer_number_to_merge for SE
+ --smartengine-mutex-backtrace-threshold-ns=# 
+ DBOptions::mutex_backtrace_threshold_ns for SE
+ --smartengine-parallel-read-threads=# 
+ Number of threads to do parallel read.
+ --smartengine-parallel-recovery-thread-num=# 
+ DBOptions::parallel_recovery_thread_num for SE. Default
+ is 0
+ --smartengine-parallel-wal-recovery 
+ DBOptions::parallel_wal_recovery for SE. Default is FALSE
+ --smartengine-pause-background-work 
+ Disable all se background operations
+ --smartengine-perf-context[=name] 
+ Enable or disable SMARTENGINE_PERF_CONTEXT plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-perf-context-global[=name] 
+ Enable or disable SMARTENGINE_PERF_CONTEXT_GLOBAL plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-purge-invalid-subtable-bg 
+ Turn on to enable purging invalid subtable in background
+ (Defaults to on; use --skip-smartengine-purge-invalid-subtable-bg to disable.)
+ --smartengine-query-trace[=name] 
+ Enable or disable SMARTENGINE_QUERY_TRACE plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-query-trace-print-slow 
+ If print slow query detail in error log for SE
+ --smartengine-query-trace-sum=name 
+ If record query detail in IS table for SE
+ --smartengine-query-trace-threshold-time=# 
+ If a query use more than this, a trace log will be
+ printed to error log
+ --smartengine-rate-limiter-bytes-per-sec=# 
+ DBOptions::rate_limiter bytes_per_sec for SE
+ --smartengine-reset-pending-shrink=# 
+ reset subtable's pending shrink
+ --smartengine-row-cache-size=# 
+ row_cache size for SE
+ --smartengine-scan-add-blocks-limit=# 
+ CFOptions::scan_add_blocks_limit for SE
+ --smartengine-shrink-allocate-interval=# 
+ DBOptions::shrink_allocate_interval for SE
+ --smartengine-shrink-table-space=# 
+ Shrink se table space
+ --smartengine-sort-buffer-size=# 
+ Memory buffer size for index creation
+ --smartengine-stats-dump-period-sec=# 
+ DBOptions::stats_dump_period_sec for SE
+ --smartengine-strict-collation-check 
+ Enforce case sensitive collation for SE indexes
+ (Defaults to on; use --skip-smartengine-strict-collation-check to disable.)
+ --smartengine-strict-collation-exceptions=name 
+ List of tables (using regex) that are excluded from the
+ case sensitive collation enforcement
+ --smartengine-subtable[=name] 
+ Enable or disable SMARTENGINE_SUBTABLE plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-table-cache-numshardbits=# 
+ DBOptions::table_cache_numshardbits for SE
+ --smartengine-table-cache-size=# 
+ DBOptions::table_cache_size for SE
+ --smartengine-table-space[=name] 
+ Enable or disable SMARTENGINE_TABLE_SPACE plugin.
+ Possible values are ON, OFF, FORCE (don't start if the
+ plugin fails to load).
+ --smartengine-tables[=name] 
+ Enable or disable SMARTENGINE_TABLES plugin. Possible
+ values are ON, OFF, FORCE (don't start if the plugin
+ fails to load).
+ --smartengine-total-max-shrink-extent-count=# 
+ DBOptions::total_max_shrink_extent_count for SE
+ --smartengine-trx[=name] 
+ Enable or disable SMARTENGINE_TRX plugin. Possible values
+ are ON, OFF, FORCE (don't start if the plugin fails to
+ load).
+ --smartengine-unsafe-for-binlog 
+ Allowing statement based binary logging which may break
+ consistency
+ --smartengine-wal-dir=name 
+ DBOptions::wal_dir for SE
+ --smartengine-wal-recovery-mode=# 
+ DBOptions::wal_recovery_mode for SE. Default is
+ kAbsoluteConsistency
+ --smartengine-write-buffer-size=# 
+ CFOptions::write_buffer_size for SE
+ --smartengine-write-disable-wal 
+ WriteOptions::disableWAL for SE
  --socket=name       Socket file to use for connection
  --sort-buffer-size=# 
  Each thread that needs to do a sort allocates a buffer of
@@ -2029,6 +2303,114 @@ slave-transaction-retries 10
 slave-type-conversions 
 slow-launch-time 2
 slow-query-log FALSE
+smartengine OFF
+smartengine-auto-shrink-enabled TRUE
+smartengine-auto-shrink-schedule-interval 3600
+smartengine-base-background-compactions 1
+smartengine-batch-group-max-group-size 8
+smartengine-batch-group-max-leader-wait-time-us 50
+smartengine-batch-group-slot-array-size 8
+smartengine-block-cache-size 536870912
+smartengine-block-size 16384
+smartengine-bottommost-level 2
+smartengine-bulk-load-size 10000
+smartengine-cfstats OFF
+smartengine-columns OFF
+smartengine-compact-cf 0
+smartengine-compaction-delete-percent 70
+smartengine-compaction-history OFF
+smartengine-compaction-mode 0
+smartengine-compaction-stats OFF
+smartengine-compaction-task OFF
+smartengine-compaction-task-extents-limit 1000
+smartengine-compaction-type 0
+smartengine-compression-options -14:1:0
+smartengine-compression-per-level kNoCompression
+smartengine-concurrent-writable-file-buffer-num 4
+smartengine-concurrent-writable-file-buffer-switch-limit 32768
+smartengine-concurrent-writable-file-single-buffer-size 65536
+smartengine-cpu-compaction-thread-num 8
+smartengine-datadir ./.smartengine
+smartengine-db-total-write-buffer-size 107374182400
+smartengine-db-write-buffer-size 107374182400
+smartengine-dbstats OFF
+smartengine-ddl OFF
+smartengine-deadlock-detect FALSE
+smartengine-debug-info OFF
+smartengine-disable-auto-compactions FALSE
+smartengine-disable-instant-ddl FALSE
+smartengine-disable-online-ddl 0
+smartengine-disable-parallel-ddl FALSE
+smartengine-dump-malloc-stats FALSE
+smartengine-dump-memtable-limit-size 67108864
+smartengine-enable-2pc TRUE
+smartengine-estimate-cost-depth 0
+smartengine-flush-delete-percent 70
+smartengine-flush-delete-percent-trigger 700000
+smartengine-flush-delete-record-trigger 700000
+smartengine-flush-log-at-trx-commit 1
+smartengine-force-flush-memtable-now FALSE
+smartengine-fpga-compaction-thread-num 8
+smartengine-global-info OFF
+smartengine-hotbackup 
+smartengine-idle-tasks-schedule-time 60
+smartengine-index-file-map OFF
+smartengine-level-compaction-dynamic-level-bytes TRUE
+smartengine-level0-file-num-compaction-trigger 64
+smartengine-level0-layer-num-compaction-trigger 8
+smartengine-level1-extents-major-compaction-trigger 1000
+smartengine-level2-usage-percent 70
+smartengine-lock-scanned-rows FALSE
+smartengine-lock-wait-timeout 1
+smartengine-locks OFF
+smartengine-master-thread-monitor-interval-ms 60000
+smartengine-max-background-compactions 1
+smartengine-max-background-dumps 1
+smartengine-max-background-flushes 1
+smartengine-max-free-extent-percent 10
+smartengine-max-manifest-file-size 18446744073709551615
+smartengine-max-row-locks 1073741824
+smartengine-max-shrink-extent-count 512
+smartengine-max-total-wal-size 107374182400
+smartengine-max-write-buffer-number 1000
+smartengine-max-write-buffer-number-to-maintain 1000
+smartengine-mem-alloc OFF
+smartengine-memtable 
+smartengine-min-write-buffer-number-to-merge 2
+smartengine-mutex-backtrace-threshold-ns 1000000000
+smartengine-parallel-read-threads 4
+smartengine-parallel-recovery-thread-num 0
+smartengine-parallel-wal-recovery FALSE
+smartengine-pause-background-work FALSE
+smartengine-perf-context OFF
+smartengine-perf-context-global OFF
+smartengine-purge-invalid-subtable-bg TRUE
+smartengine-query-trace OFF
+smartengine-query-trace-print-slow FALSE
+smartengine-query-trace-sum OFF
+smartengine-query-trace-threshold-time 100
+smartengine-rate-limiter-bytes-per-sec 0
+smartengine-reset-pending-shrink 0
+smartengine-row-cache-size 0
+smartengine-scan-add-blocks-limit 100
+smartengine-shrink-allocate-interval 3600
+smartengine-shrink-table-space -1
+smartengine-sort-buffer-size 4194304
+smartengine-stats-dump-period-sec 600
+smartengine-strict-collation-check TRUE
+smartengine-strict-collation-exceptions (No default value)
+smartengine-subtable OFF
+smartengine-table-cache-numshardbits 7
+smartengine-table-cache-size 1073741824
+smartengine-table-space OFF
+smartengine-tables OFF
+smartengine-total-max-shrink-extent-count 7680
+smartengine-trx OFF
+smartengine-unsafe-for-binlog FALSE
+smartengine-wal-dir 
+smartengine-wal-recovery-mode 1
+smartengine-write-buffer-size 268435456
+smartengine-write-disable-wal FALSE
 sort-buffer-size 262144
 source-verify-checksum FALSE
 sporadic-binlog-dump-fail FALSE

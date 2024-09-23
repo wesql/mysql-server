@@ -11,6 +11,10 @@ let $INNODB_PAGE_SIZE = `select @@innodb_page_size`;
 let MYSQLD_EXTRA_ARGS = --innodb-redo-log-capacity=8388608 --innodb_page_size=$INNODB_PAGE_SIZE;
 
 --echo # Initialize new data directory...
+if ($USE_CONSENSUS_CLUSTER)
+{
+  --let $CLUSTER_INFO = '127.0.0.1:27738@1'
+}
 --source include/initialize_datadir.inc
 
 let $restart_parameters = restart: --datadir=$MYSQLD_DATADIR --log-error=$MYSQLD_ERROR_LOG $MYSQLD_EXTRA_ARGS;

@@ -1215,6 +1215,19 @@ bool reset_master(THD *thd, bool unlock_global_read_lock) {
     goto end;
   }
 
+#ifdef WESQL_CLUSTER
+#ifndef WESQL_TEST
+  /*
+    No RESET MASTER commands are allowed while Consensus Replication is enalbed
+  */
+  if (is_consensus_replication_enabled()) {
+    my_error(ER_CANT_RESET_SOURCE, MYF(0), "Consensus Replication is enabled");
+    ret = true;
+    goto end;
+  }
+#endif
+#endif
+
   if (mysql_bin_log.is_open()) {
     /*
       mysql_bin_log.reset_logs will delete the binary logs *and* clear

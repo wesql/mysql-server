@@ -606,6 +606,23 @@ int test_quick_select(THD *thd, MEM_ROOT *return_mem_root,
       index_merge_allowed &&
       thd->optimizer_switch_flag(OPTIMIZER_SWITCH_INDEX_MERGE_INTERSECT);
 
+#ifdef WITH_SMARTENGINE
+  /**In order to fix the issue of non-optimal covered indexes preventing range
+   * scan selection.If the best cost comes from the cost of a covered index, and
+   * that covered index cannot actually be used by the current query, then this
+   * cost will prevent the range scan plan from being selected (see function
+   * get_key_scans_params()).
+   *
+   * The original cost is retained here. If later, during the evaluation of the
+   * index range scan logic(get_key_scans_params()), the best cost comes from
+   * a covered index, then the read cost will be set to original cost to avoid
+   * discarding a better range scan plan mistakenly.
+   *
+   * The above logic only applies to tables using the smartengine storage engine.*/
+  double covering_index_cost = 0;
+  double base_cost = cost_est.total_cost();
+#endif
+
   /* Calculate cost of full index read for the shortest covering index */
   if (!table->covering_keys.is_clear_all()) {
     int key_for_use = find_shortest_key(table, &table->covering_keys);
@@ -616,6 +633,10 @@ int test_quick_select(THD *thd, MEM_ROOT *return_mem_root,
         key_for_use, 1, static_cast<double>(records));
     key_read_time.add_cpu(
         cost_model->row_evaluate_cost(static_cast<double>(records)));
+
+#ifdef WITH_SMARTENGINE
+    covering_index_cost = key_read_time.total_cost();
+#endif
 
     bool chosen = false;
     if (key_read_time < cost_est) {
@@ -729,9 +750,23 @@ int test_quick_select(THD *thd, MEM_ROOT *return_mem_root,
       */
       Opt_trace_object trace_range_alt(trace, "analyzing_range_alternatives",
                                        Opt_trace_context::RANGE_OPTIMIZER);
+#ifdef WITH_SMARTENGINE
+      double read_cost = best_cost;
+      /**As stated above, if the conditions are met, the read cost will be set
+       * to the original cost. if this covered index is availablem it will still
+       * be selected in get_key_scans_params.*/
+      if ((DB_TYPE_SMARTENGINE == table->file->ht->db_type)
+          && (covering_index_cost == best_cost)) {
+          read_cost = base_cost;
+      }
+      AccessPath *range_path = get_key_scans_params(
+          thd, &param, tree, false, true, interesting_order,
+          skip_records_in_range, read_cost, /*ror_only=*/false, needed_reg);
+#else
       AccessPath *range_path = get_key_scans_params(
           thd, &param, tree, false, true, interesting_order,
           skip_records_in_range, best_cost, /*ror_only=*/false, needed_reg);
+#endif
 
       /* Get best 'range' plan and prepare data for making other plans */
       if (range_path) {

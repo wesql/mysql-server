@@ -74,6 +74,11 @@ Server_state_delegate *server_state_delegate;
 Binlog_transmit_delegate *binlog_transmit_delegate;
 Binlog_relay_IO_delegate *binlog_relay_io_delegate;
 
+#ifdef WESQL_CLUSTER
+Binlog_applier_delegate *binlog_applier_delegate;
+Binlog_manager_delegate *binlog_manager_delegate;
+#endif
+
 bool opt_replication_optimize_for_static_plugin_config{false};
 std::atomic<bool> opt_replication_sender_observe_commit_only{false};
 
@@ -359,6 +364,12 @@ int delegates_init() {
       place_transmit_mem[sizeof(Binlog_transmit_delegate)];
   alignas(Binlog_relay_IO_delegate) static char
       place_relay_io_mem[sizeof(Binlog_relay_IO_delegate)];
+#ifdef WESQL_CLUSTER
+  alignas(Binlog_applier_delegate) static char
+      place_applier_mem[sizeof(Binlog_applier_delegate)];
+  alignas(Binlog_manager_delegate) static char
+      place_binlog_manager_mem[sizeof(Binlog_manager_delegate)];
+#endif
 
   transaction_delegate = new (place_trans_mem) Trans_delegate;
   if (!transaction_delegate->is_inited()) {
@@ -384,6 +395,21 @@ int delegates_init() {
     LogErr(ERROR_LEVEL, ER_RPL_BINLOG_RELAY_DELEGATES_INIT_FAILED);
     return 1;
   }
+
+#ifdef WESQL_CLUSTER
+  binlog_applier_delegate = new (place_applier_mem) Binlog_applier_delegate;
+  if (!binlog_applier_delegate->is_inited()) {
+    LogErr(ERROR_LEVEL, ER_RPL_BINLOG_TRANSMIT_DELEGATES_INIT_FAILED);
+    return 1;
+  }
+
+  binlog_manager_delegate =
+      new (place_binlog_manager_mem) Binlog_manager_delegate;
+  if (!binlog_manager_delegate->is_inited()) {
+    LogErr(ERROR_LEVEL, ER_RPL_BINLOG_RELAY_DELEGATES_INIT_FAILED);
+    return 1;
+  }
+#endif
 
   return 0;
 }
@@ -1292,6 +1318,347 @@ int Binlog_relay_IO_delegate::applier_log_event(THD *thd, int &out) {
   return ret;
 }
 
+#ifdef WESQL_CLUSTER
+int Binlog_applier_delegate::rli_init_info(Relay_log_info *rli,
+                                      bool force_retriever_gtid,
+                                      bool &exit_init) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, rli_init_info, (&param, force_retriever_gtid, exit_init));
+  return ret;
+}
+
+int Binlog_applier_delegate::rli_end_info(Relay_log_info *rli, bool &exit_end) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, rli_end_info, (&param, exit_end));
+  return ret;
+}
+
+int Binlog_applier_delegate::before_start(Relay_log_info *rli,
+                                          ulong n_workers) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, before_start, (&param, n_workers));
+  return ret;
+}
+
+int Binlog_applier_delegate::on_mts_recovery_groups(Relay_log_info *rli,
+                                                    bool &exit) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_mts_recovery_groups, (&param, exit));
+  return ret;
+}
+
+int Binlog_applier_delegate::on_mts_finalize_recovery(Relay_log_info *rli) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_mts_finalize_recovery, (&param));
+  return ret;
+}
+
+int Binlog_applier_delegate::after_stop(Relay_log_info *rli) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_stop, (&param));
+  return ret;
+}
+
+int Binlog_applier_delegate::reader_before_open(Relay_log_info *rli,
+                                         Rpl_applier_reader *applier_reader) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, reader_before_open, (&param, applier_reader));
+  return ret;
+}
+
+int Binlog_applier_delegate::reader_before_read_event(
+    Relay_log_info *rli, Rpl_applier_reader *applier_reader) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, reader_before_read_event, (&param, applier_reader));
+  return ret;
+}
+
+int Binlog_applier_delegate::reader_before_close(
+    Relay_log_info *rli, Rpl_applier_reader *applier_reader) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, reader_before_close, (&param, applier_reader));
+  return ret;
+}
+
+int Binlog_applier_delegate::before_read_next_event(Relay_log_info *rli,
+                                                    bool &applier_stop) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, before_read_next_event, (&param, applier_stop));
+  return ret;
+}
+
+int Binlog_applier_delegate::before_apply_event(Relay_log_info *rli,
+                                                Log_event *ev) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, before_apply_event, (&param, ev));
+  return ret;
+}
+
+int Binlog_applier_delegate::on_mts_groups_assigned(Relay_log_info *rli,
+                                                    Slave_job_group *ptr_g) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_mts_groups_assigned, (&param, ptr_g));
+  return ret;
+}
+
+int Binlog_applier_delegate::on_stmt_done(Relay_log_info *rli) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_stmt_done, (&param));
+  return ret;
+};
+
+int Binlog_applier_delegate::on_commit_positions(Relay_log_info *rli,
+                                                 Slave_job_group *ptr_g,
+                                                 bool check_xa) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_commit_positions, (&param, ptr_g, check_xa));
+  return ret;
+}
+
+int Binlog_applier_delegate::on_rollback_positions(Relay_log_info *rli) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_rollback_positions, (&param));
+  return ret;
+}
+
+int Binlog_applier_delegate::on_checkpoint_routine(Relay_log_info *rli) {
+  Binlog_applier_param param;
+  param.rli = rli;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, on_checkpoint_routine, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::binlog_recovery(MYSQL_BIN_LOG *binlog) {
+  Binlog_manager_param param;
+  param.binlog = binlog;
+  param.thd = nullptr;
+
+  int ret = 0;
+  FOREACH_OBSERVER(ret, binlog_recovery, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_binlog_recovery(MYSQL_BIN_LOG *binlog) {
+  Binlog_manager_param param;
+  param.binlog = binlog;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_binlog_recovery, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::gtid_recovery(MYSQL_BIN_LOG *binlog) {
+  Binlog_manager_param param;
+  param.binlog = binlog;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, gtid_recovery, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::new_file(
+    MYSQL_BIN_LOG *binlog, const char *log_file_name, bool null_created_arg,
+    bool need_sid_lock, Format_description_log_event *extra_description_event,
+    bool &write_file_name_to_index_file) {
+  Binlog_manager_param param;
+  param.binlog = binlog;
+  param.thd = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, new_file,
+                   (&param, log_file_name, null_created_arg, need_sid_lock,
+                    extra_description_event, write_file_name_to_index_file));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_purge_file(MYSQL_BIN_LOG *binlog,
+                                              const char *log_file_name) {
+  Binlog_manager_param param;
+  param.binlog = binlog;
+  param.thd = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_purge_file, (&param, log_file_name));
+  return ret;
+}
+
+int Binlog_manager_delegate::before_binlog_flush(THD *thd) {
+  Binlog_manager_param param;
+  param.binlog = nullptr;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, before_binlog_flush, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::write_transaction(THD *thd, MYSQL_BIN_LOG *binlog,
+                                               Gtid_log_event *gtid_event,
+                                               binlog_cache_data *cache_data,
+                                               bool have_checksum) {
+  Binlog_manager_param param;
+  param.binlog = binlog;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, write_transaction,
+                   (&param, gtid_event, cache_data, have_checksum));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_queue_write(THD *thd) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_queue_write, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_queue_flush(THD *thd,
+                                               bool &delay_update_binlog_pos) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_queue_flush, (&param, delay_update_binlog_pos));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_queue_sync(THD *thd,
+                                              bool &delay_update_binlog_pos) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_queue_sync, (&param, delay_update_binlog_pos));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_enrolling_stage(THD *thd,
+                                                   MYSQL_BIN_LOG *binlog,
+                                                   int stage) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  param.binlog = binlog;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_enrolling_stage, (&param, stage));
+  return ret;
+}
+
+int Binlog_manager_delegate::before_finish_in_engines(THD *thd,
+                                                      bool finish_commit) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, before_finish_in_engines, (&param, finish_commit));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_finish_commit(THD *thd) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_finish_commit, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::before_rotate_and_purge(THD *thd,
+                                                     MYSQL_BIN_LOG *binlog,
+                                                     bool &do_rotate) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  param.binlog = binlog;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, before_rotate_and_purge, (&param, do_rotate));
+  return ret;
+}
+
+int Binlog_manager_delegate::after_rotate_and_purge(THD *thd,
+                                                    MYSQL_BIN_LOG *binlog) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  param.binlog = binlog;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, after_rotate_and_purge, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::rotate_and_purge(THD *thd, bool force_rotate) {
+  Binlog_manager_param param;
+  param.thd = thd;
+  param.binlog = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, rotate_and_purge, (&param, force_rotate));
+  return ret;
+}
+
+int Binlog_manager_delegate::reencrypt_logs() {
+  Binlog_manager_param param;
+  param.thd = nullptr;
+  param.binlog = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, reencrypt_logs, (&param));
+  return ret;
+}
+
+int Binlog_manager_delegate::purge_logs(ulong purge_time, ulong purge_size,
+                                        const char *to_log, bool auto_purge) {
+  Binlog_manager_param param;
+  param.thd = nullptr;
+  param.binlog = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, purge_logs,
+                   (&param, purge_time, purge_size, to_log, auto_purge));
+  return ret;
+}
+
+int Binlog_manager_delegate::get_unique_index_from_pos(
+    const char *log_file_name, my_off_t log_pos, uint64 &unique_index) {
+  Binlog_manager_param param;
+  param.thd = nullptr;
+  param.binlog = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, get_unique_index_from_pos,
+                   (&param, log_file_name, log_pos, unique_index));
+  return ret;
+}
+
+int Binlog_manager_delegate::get_pos_from_unique_index(uint64 unique_index,
+                                                       char *log_file_name,
+                                                       my_off_t &log_pos) {
+  Binlog_manager_param param;
+  param.thd = nullptr;
+  param.binlog = nullptr;
+  int ret = 0;
+  FOREACH_OBSERVER(ret, get_pos_from_unique_index,
+                   (&param, unique_index, log_file_name, log_pos));
+  return ret;
+}
+#endif
+
 int register_trans_observer(Trans_observer *observer, void *p) {
   return transaction_delegate->add_observer(observer, (st_plugin_int *)p);
 }
@@ -1346,6 +1713,28 @@ int unregister_binlog_relay_io_observer(Binlog_relay_IO_observer *observer,
                                         void *) {
   return binlog_relay_io_delegate->remove_observer(observer);
 }
+
+#ifdef WESQL_CLUSTER
+int register_binlog_applier_observer(Binlog_applier_observer *observer,
+                                      void *p) {
+  return binlog_applier_delegate->add_observer(observer, (st_plugin_int *)p);
+}
+
+int unregister_binlog_applier_observer(Binlog_applier_observer *observer,
+                                        void *) {
+  return binlog_applier_delegate->remove_observer(observer);
+}
+
+int register_binlog_manager_observer(Binlog_manager_observer *observer,
+                                     void *p) {
+  return binlog_manager_delegate->add_observer(observer, (st_plugin_int *)p);
+}
+
+int unregister_binlog_manager_observer(Binlog_manager_observer *observer,
+                                       void *) {
+  return binlog_manager_delegate->remove_observer(observer);
+}
+#endif
 
 static bool is_show_status(enum_sql_command sql_command) {
   switch (sql_command) {

@@ -787,7 +787,11 @@ extern Slow_log_throttle log_throttle_qni;
 #define sql_print_warning(...) \
   log_errlog_formatted(WARNING_LEVEL, ##__VA_ARGS__)
 
+#ifdef WITH_SMARTENGINE
+#define sql_print_error(...) log_errlog_formatted(loglevel::ERROR_LEVEL, ##__VA_ARGS__)
+#else
 #define sql_print_error(...) log_errlog_formatted(ERROR_LEVEL, ##__VA_ARGS__)
+#endif
 
 /**
   Prints a printf style message to the error log.

@@ -182,6 +182,14 @@
 #ifdef WITH_LOCK_ORDER
 #include "sql/debug_lock_order.h"
 #endif /* WITH_LOCK_ORDER */
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_msr.h"  // channel_map
+#include "plugin/consensus_replication/consensus_log_manager.h"
+#endif
+
+#ifdef WITH_SMARTENGINE
+#include "storage/smartengine/core/monitoring/query_perf_context.h"
+#endif
 
 namespace resourcegroups {
 class Resource_group;
@@ -635,8 +643,14 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_SHOW_COLLATIONS] =
       CF_STATUS_COMMAND | CF_HAS_RESULT_SET | CF_REEXECUTION_FRAGILE;
   sql_command_flags[SQLCOM_SHOW_BINLOGS] = CF_STATUS_COMMAND;
+#ifdef WESQL_CLUSTER
+  sql_command_flags[SQLCOM_SHOW_CONSENSUSLOGS] = CF_STATUS_COMMAND;
+#endif
   sql_command_flags[SQLCOM_SHOW_SLAVE_HOSTS] = CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_SHOW_BINLOG_EVENTS] = CF_STATUS_COMMAND;
+#ifdef WESQL_CLUSTER
+  sql_command_flags[SQLCOM_SHOW_CONSENSUSLOG_EVENTS] = CF_STATUS_COMMAND;
+#endif
   sql_command_flags[SQLCOM_SHOW_STORAGE_ENGINES] = CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_SHOW_PRIVILEGES] = CF_STATUS_COMMAND;
   sql_command_flags[SQLCOM_SHOW_WARNS] = CF_STATUS_COMMAND | CF_DIAGNOSTIC_STMT;
@@ -971,6 +985,10 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_SLAVE_STOP] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_START_GROUP_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_STOP_GROUP_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
+#ifdef WESQL_CLUSTER
+  sql_command_flags[SQLCOM_START_CONSENSUS_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
+  sql_command_flags[SQLCOM_STOP_CONSENSUS_REPLICATION] |= CF_ALLOW_PROTOCOL_PLUGIN;
+#endif
   sql_command_flags[SQLCOM_BEGIN] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_CHANGE_MASTER] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_CHANGE_REPLICATION_FILTER] |=
@@ -980,6 +998,9 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_PURGE] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_PURGE_BEFORE] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_SHOW_BINLOGS] |= CF_ALLOW_PROTOCOL_PLUGIN;
+#ifdef WESQL_CLUSTER
+  sql_command_flags[SQLCOM_SHOW_CONSENSUSLOGS] |= CF_ALLOW_PROTOCOL_PLUGIN;
+#endif
   sql_command_flags[SQLCOM_SHOW_OPEN_TABLES] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_HA_OPEN] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_HA_CLOSE] |= CF_ALLOW_PROTOCOL_PLUGIN;
@@ -988,6 +1009,9 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_DELETE_MULTI] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_UPDATE_MULTI] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_SHOW_BINLOG_EVENTS] |= CF_ALLOW_PROTOCOL_PLUGIN;
+#ifdef WESQL_CLUSTER
+  sql_command_flags[SQLCOM_SHOW_CONSENSUSLOG_EVENTS] |= CF_ALLOW_PROTOCOL_PLUGIN;
+#endif
   sql_command_flags[SQLCOM_DO] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_SHOW_WARNS] |= CF_ALLOW_PROTOCOL_PLUGIN;
   sql_command_flags[SQLCOM_EMPTY_QUERY] |= CF_ALLOW_PROTOCOL_PLUGIN;
@@ -1158,6 +1182,10 @@ void init_sql_command_flags() {
   sql_command_flags[SQLCOM_RENAME_USER] |= CF_REQUIRE_ACL_CACHE;
   sql_command_flags[SQLCOM_SHOW_GRANTS] |= CF_REQUIRE_ACL_CACHE;
   sql_command_flags[SQLCOM_SET_PASSWORD] |= CF_REQUIRE_ACL_CACHE;
+#ifdef WESQL
+  /* Native package proc flags */
+  sql_command_flags[SQLCOM_ADMIN_PROC] = CF_AUTO_COMMIT_TRANS;
+#endif
 }
 
 bool sqlcom_can_generate_row_events(enum enum_sql_command command) {
@@ -1699,6 +1727,11 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
   DBUG_TRACE;
   DBUG_PRINT("info", ("command: %d", command));
 
+#ifdef WITH_SMARTENGINE
+  QUERY_TRACE_RESET();
+  QUERY_TRACE_BEGIN(smartengine::monitor::TracePoint::SERVER_OPERATION);
+#endif
+
   Sql_cmd_clone *clone_cmd = nullptr;
 
   /* SHOW PROFILE instrumentation, begin */
@@ -2088,6 +2121,13 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
         size_t length =
             static_cast<size_t>(packet_end - beginning_of_next_stmt);
 
+#ifdef WITH_SMARTENGINE
+        QUERY_TRACE_END(); // end SERVER_OPERATION trace
+        if (thd) {
+          QUERY_TRACE_FINISH(thd->query().str, thd->query().length);
+        }
+#endif
+
         log_slow_statement(thd);
 
         thd->reset_copy_status_var();
@@ -2113,6 +2153,11 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
 #if defined(ENABLED_PROFILING)
         thd->profiling->start_new_query("continuing");
         thd->profiling->set_query_source(beginning_of_next_stmt, length);
+#endif
+
+#ifdef WITH_SMARTENGINE
+        QUERY_TRACE_RESET();
+        QUERY_TRACE_BEGIN(smartengine::monitor::TracePoint::SERVER_OPERATION);
 #endif
 
         mysql_thread_set_secondary_engine(false);
@@ -2268,6 +2313,16 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
       break;
     case COM_BINLOG_DUMP_GTID:
       MYSQL_NOTIFY_STATEMENT_QUERY_ATTRIBUTES(thd->m_statement_psi, false);
+#ifdef WESQL_CLUSTER
+      if (is_consensus_replication_enabled() &&
+          is_consensus_replication_log_mode()) {
+        my_message(ER_NOT_SUPPORTED_YET,
+                   "Consensus replication logger do not support "
+                   "COM_BINLOG_DUMP_GTID command",
+                   MYF(0));
+        break;
+      }
+#endif
       // TODO: access of protocol_classic should be removed
       error = com_binlog_dump_gtid(
           thd, (char *)thd->get_protocol_classic()->get_raw_packet(),
@@ -2445,6 +2500,13 @@ bool dispatch_command(THD *thd, const COM_DATA *com_data,
   }
 
 done:
+#ifdef WITH_SMARTENGINE
+  QUERY_TRACE_END(); // end SERVER_OPERATION trace
+  if (thd) {
+    QUERY_TRACE_FINISH(thd->query().str, thd->query().length);
+  }
+#endif
+
   assert(thd->open_tables == nullptr ||
          (thd->locked_tables_mode == LTM_LOCK_TABLES));
 
@@ -3428,6 +3490,18 @@ int mysql_execute_command(THD *thd, bool first_level) {
       res = purge_source_logs_before_date(thd, purge_time);
       break;
     }
+#ifdef WESQL_CLUSTER
+    case SQLCOM_SHOW_CONSENSUSLOG_EVENTS: {
+      if (is_consensus_replication_enabled()) {
+        res = consensus_replication_show_log_events(thd);
+      } else {
+        my_error(ER_NOT_SUPPORTED_YET, MYF(0),
+                 ",please set consensus_enabled=on");
+        goto error;
+      }
+      break;
+    }
+#endif
     case SQLCOM_CHANGE_MASTER: {
       Security_context *sctx = thd->security_context();
       if (!sctx->check_access(SUPER_ACL) &&
@@ -3603,6 +3677,63 @@ int mysql_execute_command(THD *thd, bool first_level) {
       res = start_slave_cmd(thd);
       break;
     }
+#ifdef WESQL_CLUSTER
+    case SQLCOM_START_CONSENSUS_REPLICATION:
+      if (is_consensus_replication_enabled()) {
+        if (lex->slave_connection.password || lex->slave_connection.user) {
+          my_error(ER_GROUP_REPLICATION_USER_MANDATORY_MSG, MYF(0));
+          goto error;
+        }
+
+        thd->lex->mi.for_channel = true;
+        thd->lex->mi.channel =
+            channel_map.get_consensus_replication_applier_channel();
+        thd->lex->slave_thd_opt = SLAVE_SQL;
+        res = start_slave_cmd(thd);
+      } else {
+        my_error(ER_NOT_SUPPORTED_YET, MYF(0),
+                 ",please set consensus_enabled=on");
+        goto error;
+      }
+      break;
+    case SQLCOM_STOP_CONSENSUS_REPLICATION:
+      if (is_consensus_replication_enabled()) {
+        /*
+          If the client thread has locked tables, a deadlock is possible.
+          Assume that
+          - the client thread does LOCK TABLE t READ.
+          - then the master updates t.
+          - then the SQL slave thread wants to update t,
+            so it waits for the client thread because t is locked by it.
+          - then the client thread does SLAVE STOP.
+            SLAVE STOP waits for the SQL slave thread to terminate its
+            update t, which waits for the client thread because t is locked by
+          it. To prevent that, refuse SLAVE STOP if the client thread has locked
+          tables
+        */
+        if (thd->locked_tables_mode ||
+            thd->in_active_multi_stmt_transaction() ||
+            thd->global_read_lock.is_acquired()) {
+          my_error(ER_LOCK_OR_ACTIVE_TRANSACTION, MYF(0));
+          goto error;
+        }
+
+        thd->lex->mi.for_channel = true;
+        thd->lex->mi.channel =
+            channel_map.get_consensus_replication_applier_channel();
+        thd->lex->slave_thd_opt = SLAVE_SQL;
+        res = stop_slave_cmd(thd);
+        LogErr(INFORMATION_LEVEL, ER_CONSENSUS_CMD_LOG,
+               thd->m_main_security_ctx.user().str,
+               thd->m_main_security_ctx.host_or_ip().str, thd->query().str,
+               res);
+      } else {
+        my_error(ER_NOT_SUPPORTED_YET, MYF(0),
+                 ",please set consensus_enabled=on");
+        goto error;
+      }
+      break;
+#endif
     case SQLCOM_SLAVE_STOP: {
       /*
         If the client thread has locked tables, a deadlock is possible.
@@ -3660,6 +3791,18 @@ int mysql_execute_command(THD *thd, bool first_level) {
       if (mysql_rename_tables(thd, first_table)) goto error;
       break;
     }
+#ifdef WESQL_CLUSTER
+    case SQLCOM_SHOW_CONSENSUSLOGS: {
+      if (is_consensus_replication_enabled()) {
+        res = consensus_replication_show_logs(thd);
+      } else {
+        my_error(ER_NOT_SUPPORTED_YET, MYF(0),
+                 ",please set consensus_enabled=on");
+        goto error;
+      }
+      break;
+    }
+#endif
     case SQLCOM_CHECKSUM: {
       assert(first_table == all_tables && first_table != nullptr);
       if (check_table_access(thd, SELECT_ACL, all_tables, false, UINT_MAX,
@@ -4712,6 +4855,10 @@ int mysql_execute_command(THD *thd, bool first_level) {
     case SQLCOM_ALTER_TABLESPACE:
     case SQLCOM_EXPLAIN_OTHER:
     case SQLCOM_RESTART_SERVER:
+#ifdef WESQL
+    case SQLCOM_ADMIN_PROC:
+    case SQLCOM_TRANS_PROC:
+#endif
     case SQLCOM_CREATE_SRS:
     case SQLCOM_DROP_SRS: {
       assert(lex->m_sql_cmd != nullptr);
@@ -5183,6 +5330,10 @@ void THD::reset_for_next_command() {
   thd->reset_current_stmt_binlog_format_row();
   thd->binlog_unsafe_warning_flags = 0;
   thd->binlog_need_explicit_defaults_ts = false;
+
+#ifdef WESQL_CLUSTER
+  reset_consensus_context(thd);
+#endif
 
   thd->commit_error = THD::CE_NONE;
   thd->durability_property = HA_REGULAR_DURABILITY;

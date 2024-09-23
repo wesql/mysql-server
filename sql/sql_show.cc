@@ -72,6 +72,8 @@
 #include "sql/auth/auth_acls.h"  // DB_ACLS
 #include "sql/auth/auth_common.h"
 #include "sql/auth/sql_security_ctx.h"
+#include "sql/binlog_archive.h"
+#include "sql/consistent_archive.h"
 #include "sql/dd/cache/dictionary_client.h"  // dd::cache::Dictionary_client
 #include "sql/dd/dd_schema.h"                // dd::Schema_MDL_locker
 #include "sql/dd/dd_table.h"                 // is_encrypted
@@ -2868,9 +2870,9 @@ class List_process_list : public Do_THD_Impl {
         thd_info->host = host;
       } else
         thd_info->host = m_client_thd->mem_strdup(
-            inspect_sctx_host_or_ip.str[0]
-                ? inspect_sctx_host_or_ip.str
-                : inspect_sctx_host.length ? inspect_sctx_host.str : "");
+            inspect_sctx_host_or_ip.str[0] ? inspect_sctx_host_or_ip.str
+            : inspect_sctx_host.length     ? inspect_sctx_host.str
+                                           : "");
     }  // We've copied the security context, so release the lock.
 
     DBUG_EXECUTE_IF("processlist_acquiring_dump_threads_LOCK_thd_data", {
@@ -4059,11 +4061,10 @@ static int get_schema_tmp_table_columns_record(THD *thd, Table_ref *tables,
 
     // COLUMN_KEY
     pos = pointer_cast<const uchar *>(
-        field->is_flag_set(PRI_KEY_FLAG)
-            ? "PRI"
-            : field->is_flag_set(UNIQUE_KEY_FLAG)
-                  ? "UNI"
-                  : field->is_flag_set(MULTIPLE_KEY_FLAG) ? "MUL" : "");
+        field->is_flag_set(PRI_KEY_FLAG)        ? "PRI"
+        : field->is_flag_set(UNIQUE_KEY_FLAG)   ? "UNI"
+        : field->is_flag_set(MULTIPLE_KEY_FLAG) ? "MUL"
+                                                : "");
     table->field[TMP_TABLE_COLUMNS_COLUMN_KEY]->store(
         (const char *)pos, strlen((const char *)pos), cs);
 
@@ -4957,6 +4958,476 @@ static int hton_fill_schema_table(THD *thd, Table_ref *tables, Item *cond) {
   return 0;
 }
 
+static int fill_binlog_persistent_task_info(THD *thd, Table_ref *tables, Item *) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  Binlog_archive *binlog_archive = Binlog_archive::get_instance();
+  mysql_mutex_t *binlog_archive_lock =
+      binlog_archive->get_binlog_archive_lock();
+  mysql_mutex_lock(binlog_archive_lock);
+  if (!binlog_archive->is_thread_running()) {
+    mysql_mutex_unlock(binlog_archive_lock);
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG,
+           "binlog archive is not running");
+    return 0;
+  }
+  mysql_mutex_unlock(binlog_archive_lock);
+  std::string mysql_binlog{};
+  std::string archived_binlog{};
+  my_off_t mysql_binlog_pos = 0;
+  my_off_t mysql_binlog_write_pos = 0;
+  my_off_t archived_binlog_pos = 0;
+  my_off_t archived_binlog_write_pos = 0;
+  uint64_t consensus_index = 0;
+  uint64_t consensus_term = 0;
+
+  if (binlog_archive->show_binlog_archive_task_info(
+          consensus_index, consensus_term, mysql_binlog, mysql_binlog_pos,
+          mysql_binlog_write_pos, archived_binlog, archived_binlog_pos,
+          archived_binlog_write_pos)) {
+    return 1;
+  }
+  restore_record(table, s->default_values);
+  table->field[0]->store(consensus_index, true);
+  table->field[1]->store(consensus_term, true);
+  table->field[2]->store(mysql_binlog.c_str(), mysql_binlog.length(), cs);
+  table->field[3]->store(mysql_binlog_pos, true);
+  table->field[4]->store(mysql_binlog_write_pos, true);
+  table->field[5]->store(archived_binlog.c_str(), archived_binlog.length(), cs);
+  table->field[6]->store(archived_binlog_pos, true);
+  table->field[7]->store(archived_binlog_write_pos, true);
+  if (schema_table_store_record(thd, table)) return 1;
+
+  return 0;
+}
+
+static int fill_binlog_persistent_index_file(THD *thd, Table_ref *tables, Item *) {
+  DBUG_TRACE;
+  IO_CACHE *index_file;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  char log_name_with_path[FN_REFLEN];
+  size_t log_name_len_with_path;
+  Binlog_archive *binlog_archive = Binlog_archive::get_instance();
+  mysql_mutex_t *binlog_archive_lock = binlog_archive->get_binlog_archive_lock();
+  mysql_mutex_lock(binlog_archive_lock);
+  if (!binlog_archive->is_thread_running()) {
+    mysql_mutex_unlock(binlog_archive_lock);
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "binlog archive is not running");
+    return 0;
+  }
+  mysql_mutex_unlock(binlog_archive_lock);
+  binlog_archive->lock_binlog_index();
+  index_file = binlog_archive->get_index_file();
+  if (!index_file) {
+    LogErr(INFORMATION_LEVEL, ER_BINLOG_ARCHIVE_LOG, "binlog archive binlog index is not open");
+    binlog_archive->unlock_binlog_index();
+    return 0;
+  }
+
+  if (reinit_io_cache(index_file, READ_CACHE, (my_off_t)0, false, false)) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+
+  while ((log_name_len_with_path = my_b_gets(index_file, log_name_with_path,
+                                             sizeof(log_name_with_path))) > 1) {
+    restore_record(table, s->default_values);
+    log_name_with_path[--log_name_len_with_path] = '\0';  // remove the newline
+    std::string in_str;
+    in_str.assign(log_name_with_path);
+    size_t idx = in_str.find("|");
+
+    std::string found_log_slice_name = in_str.substr(0, idx);
+    std::string found_consensus_index = in_str.substr(idx + 1);
+    uint64_t previous_consensus_index = std::stoull(found_consensus_index);
+
+    size_t first_dot = found_log_slice_name.find('.');
+    size_t second_dot = found_log_slice_name.find('.', first_dot + 1);
+    std::string log_name = found_log_slice_name.substr(0, second_dot);
+    std::string left_string = found_log_slice_name.substr(second_dot + 1);
+    size_t third_dot = left_string.find('.');
+    std::string term = left_string.substr(0, third_dot);
+    std::string end_pos = left_string.substr(third_dot + 1);
+    uint64_t slice_consensus_term = std::stoull(term);
+    my_off_t slice_end_pos = std::stoull(end_pos);
+
+    table->field[0]->store(found_log_slice_name.c_str(), found_log_slice_name.length(), cs);
+    table->field[1]->store(log_name.c_str(), log_name.length(), cs);
+    table->field[2]->store(slice_consensus_term, true);
+    table->field[3]->store(slice_end_pos, true);
+    table->field[4]->store(previous_consensus_index, true);
+    if (schema_table_store_record(thd, table)) goto err;
+  }
+  if (index_file->error == -1) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+  binlog_archive->unlock_binlog_index();
+  return 0;
+err:
+  binlog_archive->unlock_binlog_index();
+  return 1;
+}
+
+static int fill_binlog_persistent_slices(THD *thd, Table_ref *tables,
+                                           Item *) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  std::vector<objstore::ObjectMeta> binlog_objects;
+  Binlog_archive *binlog_archive = Binlog_archive::get_instance();
+  mysql_mutex_t *binlog_archive_lock = binlog_archive->get_binlog_archive_lock();
+
+  mysql_mutex_lock(binlog_archive_lock);
+  if (!binlog_archive->is_thread_running()) {
+    mysql_mutex_unlock(binlog_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(binlog_archive_lock);
+  if (!binlog_archive->show_binlog_persistent_files(binlog_objects)) {
+    for (const auto &object : binlog_objects) {
+      restore_record(table, s->default_values);
+      table->field[0]->store(object.key.c_str(), object.key.size(), cs);
+      MYSQL_TIME timestamp;
+      // timestamp with thread time_zone
+      thd->variables.time_zone->gmt_sec_to_TIME(&timestamp,
+                                                object.last_modified / 1000);
+      table->field[1]->store_time(&timestamp);
+      // Byte
+      table->field[2]->store(object.size, true);
+      if (schema_table_store_record(thd, table)) return 1;
+    }
+  }
+  return 0;
+}
+
+static int fill_mysql_innodb_persistent_index_file(THD *thd, Table_ref *tables,
+                                                   Item *) {
+  DBUG_TRACE;
+  IO_CACHE *index_file;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  char file_name[FN_REFLEN];
+  size_t file_name_len;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock);
+
+  consistent_snapshot_archive->lock_mysql_clone_index();
+  index_file = consistent_snapshot_archive->get_mysql_clone_index_file();
+  if (!my_b_inited(index_file)) {
+    consistent_snapshot_archive->unlock_mysql_clone_index();
+    return 0;
+  }
+
+  if (reinit_io_cache(index_file, READ_CACHE, (my_off_t)0, false, false)) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+
+  while ((file_name_len = my_b_gets(index_file, file_name, sizeof(file_name))) >
+         1) {
+    restore_record(table, s->default_values);
+    file_name[--file_name_len] = '\0';  // remove the newline
+    table->field[0]->store(file_name, strlen(file_name), cs);
+    if (schema_table_store_record(thd, table)) goto err;
+  }
+  if (index_file->error == -1) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+  consistent_snapshot_archive->unlock_mysql_clone_index();
+  return 0;
+err:
+  consistent_snapshot_archive->unlock_mysql_clone_index();
+  return 1;
+}
+
+static int fill_mysql_innodb_persistent_files(THD *thd, Table_ref *tables,
+                                           Item *) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  std::vector<objstore::ObjectMeta> innodb_objects;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock); 
+  if (!consistent_snapshot_archive->show_innodb_persistent_files(innodb_objects)) {
+    for (const auto &object : innodb_objects) {
+      restore_record(table, s->default_values);
+      table->field[0]->store(object.key.c_str(), object.key.size(), cs);
+      MYSQL_TIME timestamp;
+      // timestamp with thread time_zone
+      thd->variables.time_zone->gmt_sec_to_TIME(&timestamp,
+                                                object.last_modified / 1000);
+      table->field[1]->store_time(&timestamp);
+      // Byte
+      table->field[2]->store(object.size, true);
+      if (schema_table_store_record(thd, table)) return 1;
+    }
+  }
+  return 0;
+}
+
+static int fill_se_backup_persistent_index_file(THD *thd, Table_ref *tables,
+                                           Item *) {
+  DBUG_TRACE;
+  IO_CACHE *index_file;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  char file_name[FN_REFLEN];
+  size_t file_name_len;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock);
+
+  consistent_snapshot_archive->lock_se_backup_index();
+  index_file = consistent_snapshot_archive->get_se_backup_index_file();
+  if (!my_b_inited(index_file)) {
+    consistent_snapshot_archive->unlock_se_backup_index();
+    return 0;
+  }
+
+  if (reinit_io_cache(index_file, READ_CACHE, (my_off_t)0, false, false)) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+
+  while ((file_name_len = my_b_gets(index_file, file_name, sizeof(file_name))) >
+         1) {
+    restore_record(table, s->default_values);
+    file_name[--file_name_len] = '\0';  // remove the newline
+    table->field[0]->store(file_name, strlen(file_name), cs);
+    if (schema_table_store_record(thd, table)) goto err;
+  }
+  if (index_file->error == -1) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+  consistent_snapshot_archive->unlock_se_backup_index();
+  return 0;
+err:
+  consistent_snapshot_archive->unlock_se_backup_index();
+  return 1;
+}
+
+static int fill_se_backup_persistent_files(THD *thd, Table_ref *tables,
+                                           Item *) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  std::vector<objstore::ObjectMeta> se_objects;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->show_se_persistent_files(se_objects)) {
+    for (const auto &object : se_objects) {
+      restore_record(table, s->default_values);
+      table->field[0]->store(object.key.c_str(), object.key.size(), cs);
+      MYSQL_TIME timestamp;
+      // timestamp with thread time_zone
+      thd->variables.time_zone->gmt_sec_to_TIME(&timestamp,
+                                                object.last_modified / 1000);
+      table->field[1]->store_time(&timestamp);
+      // Byte
+      table->field[2]->store(object.size, true);
+      if (schema_table_store_record(thd, table)) return 1;
+    }
+  }
+  return 0;
+}
+
+static int fill_se_extent_snapshot(THD *thd, Table_ref *tables,
+                                           Item *) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  std::vector<uint64_t> se_snapshot;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->show_se_backup_snapshot(thd, se_snapshot)) {
+    for (const auto &snapshot_id : se_snapshot) {
+      restore_record(table, s->default_values);
+      table->field[0]->store(snapshot_id, true);
+      if (schema_table_store_record(thd, table)) return 1;
+    }
+  }
+  return 0;
+}
+
+static int fill_consistent_snapshot_persistent_index_file(THD *thd, Table_ref *tables,
+                                           Item *) {
+  DBUG_TRACE;
+  IO_CACHE *index_file;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  char snapshot_info[4 * FN_REFLEN];
+  size_t snapshot_info_len;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock);
+  consistent_snapshot_archive->lock_consistent_snapshot_index();
+  index_file = consistent_snapshot_archive->get_consistent_snapshot_index_file();
+  if (!my_b_inited(index_file)) {
+    consistent_snapshot_archive->unlock_consistent_snapshot_index();
+    return 0;
+  }
+
+  if (reinit_io_cache(index_file, READ_CACHE, (my_off_t)0, false, false)) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+
+  while ((snapshot_info_len = my_b_gets(index_file, snapshot_info, sizeof(snapshot_info))) >
+         1) {
+    snapshot_info[--snapshot_info_len] = '\0';  // remove the newline
+    std::string in_str;
+    in_str.assign(snapshot_info);
+    size_t idx = in_str.find("|");
+    std::string ts = in_str.substr(0, idx);
+    std::string left_string = in_str.substr(idx+1);
+
+    idx = left_string.find("|");
+    std::string innodb_name = left_string.substr(0, idx);
+    left_string = left_string.substr(idx+1);
+
+    idx = left_string.find("|");
+    std::string se_name = left_string.substr(0, idx);
+    left_string = left_string.substr(idx+1);
+
+    idx = left_string.find("|");
+    std::string binlog_name = left_string.substr(0, idx);
+    left_string = left_string.substr(idx+1);
+
+    idx = left_string.find("|");
+    std::string binlog_pos = left_string.substr(0, idx);
+    left_string = left_string.substr(idx+1);
+
+    idx = left_string.find("|");
+    std::string consensus_index = left_string.substr(0, idx);
+    std::string se_snapshot = left_string.substr(idx+1);
+
+    restore_record(table, s->default_values);
+    table->field[0]->store(ts.c_str(), ts.length(), cs);
+    table->field[1]->store(innodb_name.c_str(), innodb_name.length(), cs);
+    table->field[2]->store(se_name.c_str(), se_name.length(), cs);
+    table->field[3]->store(binlog_name.c_str(), binlog_name.length(), cs);
+    table->field[4]->store((longlong)std::stoll(binlog_pos), true);
+    table->field[5]->store((longlong)std::stoll(consensus_index), true);
+    table->field[6]->store((longlong)std::stoll(se_snapshot), true);
+    if (schema_table_store_record(thd, table)) goto err;
+  }
+  if (index_file->error == -1) {
+    my_error(ER_IO_ERR_LOG_INDEX_READ, MYF(0));
+    goto err;
+  }
+  consistent_snapshot_archive->unlock_consistent_snapshot_index();
+  return 0;
+err:
+  consistent_snapshot_archive->unlock_consistent_snapshot_index();
+  return 1;
+}
+
+static int fill_consistent_snapshot_persistent_task_info(THD *thd,
+                                                         Table_ref *tables,
+                                                         Item *) {
+  DBUG_TRACE;
+  TABLE *table = tables->table;
+  CHARSET_INFO *cs = system_charset_info;
+  Consistent_archive *consistent_snapshot_archive =
+      Consistent_archive::get_instance();
+  mysql_mutex_t *Consistent_archive_lock =
+      consistent_snapshot_archive->get_consistent_archive_lock();
+
+  mysql_mutex_lock(Consistent_archive_lock);
+  if (!consistent_snapshot_archive->is_thread_running()) {
+    mysql_mutex_unlock(Consistent_archive_lock);
+    return 0;
+  }
+  mysql_mutex_unlock(Consistent_archive_lock);
+  Consistent_snapshot_task_info task_info{};
+  consistent_snapshot_archive->show_consistent_snapshot_task_info(task_info);
+  restore_record(table, s->default_values);
+  table->field[0]->store(task_info.archive_progress,
+                         strlen(task_info.archive_progress), cs);
+  table->field[1]->store(task_info.consensus_term, true);
+  table->field[2]->store(task_info.consistent_snapshot_archive_start_ts,
+                         strlen(task_info.consistent_snapshot_archive_start_ts),
+                         cs);
+  table->field[3]->store(task_info.consistent_snapshot_archive_end_ts,
+                         strlen(task_info.consistent_snapshot_archive_end_ts),
+                         cs);
+  table->field[4]->store(task_info.mysql_clone_name,
+                         strlen(task_info.mysql_clone_name), cs);
+  table->field[5]->store(task_info.innodb_clone_duration, true);
+  table->field[6]->store(task_info.innodb_archive_duration, true);
+  table->field[7]->store(task_info.se_backup_name,
+                         strlen(task_info.se_backup_name), cs);
+  table->field[8]->store(task_info.se_snapshot_id, true);
+  table->field[9]->store(task_info.se_backup_duration, true);
+  table->field[10]->store(task_info.se_archive_duration, true);
+  table->field[11]->store(task_info.mysql_binlog_file,
+                          strlen(task_info.mysql_binlog_file), cs);
+  table->field[12]->store(task_info.mysql_binlog_pos, true);
+  table->field[13]->store(task_info.binlog_file, strlen(task_info.binlog_file),
+                          cs);
+  table->field[14]->store(task_info.consensus_index, true);
+  table->field[15]->store(task_info.wait_binlog_archive_duration, true);
+  if (schema_table_store_record(thd, table)) return 1;
+
+  return 0;
+}
+
 ST_FIELD_INFO engines_fields_info[] = {
     {"ENGINE", 64, MYSQL_TYPE_STRING, 0, 0, "Engine", 0},
     {"SUPPORT", 8, MYSQL_TYPE_STRING, 0, 0, "Support", 0},
@@ -5097,6 +5568,84 @@ ST_FIELD_INFO tmp_table_columns_fields_info[] = {
      MYSQL_TYPE_STRING, 0, 0, "Generation expression", 0},
     {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
 
+ST_FIELD_INFO binlog_persistent_task_info_fields_info[] = {
+    {"LAST_RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"LAST_RAFT_TERM", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"LAST_MYSQL_BINLOG", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"LAST_MYSQL_BINLOG_PERSISTENT_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"LAST_MYSQL_BINLOG_READ_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"LAST_PERSISTENT_BINLOG", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"LAST_PERSISTENT_BINLOG_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"LAST_PERSISTENT_BINLOG_WRITE_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO binlog_persistent_index_slice_fields_info[] = {
+    {"LOG_SLICE_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"LOG_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"RAFT_TERM", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"SLICE_END_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"PREVIOUS_RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO binlog_persistent_slice_fields_info[] = {
+    {"LOG_SLICE_KEY", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"LAST_MODIFIED", FN_REFLEN, MYSQL_TYPE_TIMESTAMP, 0, 0, "Null", 0},
+    {"SIZE", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO innodb_persistent_snapshot_index_fields_info[] = {
+    {"INNODB_SNAPSHOT_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO innodb_persistent_snapshot_fields_info[] = {
+    {"INNODB_SNAPSHOT_KEY", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"LAST_MODIFIED", FN_REFLEN, MYSQL_TYPE_TIMESTAMP, 0, 0, "Null", 0},
+    {"SIZE", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO se_persistent_snapshot_index_fields_info[] = {
+    {"SMARTENGINE_SNAPSHOT_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO se_persistent_snapshot_fields_info[] = {
+    {"SMARTENGINE_SNAPSHOT_KEY", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"LAST_MODIFIED", FN_REFLEN, MYSQL_TYPE_TIMESTAMP, 0, 0, "Null", 0},
+    {"SIZE", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO consisent_persistent_snapshot_index_fields_info[] = {
+    {"CREATED_TS", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"MYSQL_INNODB_SNAPSHOT_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"SMARTENGINE_SNAPSHOT_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"BINLOG_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"BINLOG_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"SMARTENGINE_SNAPSHOT", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO consisent_persistent_snapshot_task_info[] = {
+    {"PERSISTENT_PROGRESS", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"RAFT_TERM", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"START_TIMESTAMP", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"END_TIMESTAMP", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"INNODB_SNAPSHOT_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"INNODB_SNAPSHOT_DURATION", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"INNODB_SNAPSHOT_PERSISTENT_DURATION", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"SMARTENGINE_SNAPSHOT_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"SMARTENGINE_SNAPSHOT_ID", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"SMARTENGINE_SNAPSHOT_DURATION", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"SMARTENGINE_SNAPSHOT_PERSISTENT_DURATION", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"MYSQL_BINLOG_FILE", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"MYSQL_BINLOG_OFFSET", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"PERSISTENT_BINLOG_FILE", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
+    {"RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"WAIT_BINLOG_PERSISTENT_DURATION", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
+ST_FIELD_INFO se_extent_snapshot_fields_info[] = {
+    {"SMARTENGINE_SNAPSHOT", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
+
 /** For creating fields of information_schema.OPTIMIZER_TRACE */
 extern ST_FIELD_INFO optimizer_trace_info[];
 
@@ -5135,6 +5684,29 @@ ST_SCHEMA_TABLE schema_tables[] = {
      make_tmp_table_columns_format, get_schema_tmp_table_columns_record, true},
     {"TMP_TABLE_KEYS", tmp_table_keys_fields_info, show_temporary_tables,
      make_old_format, get_schema_tmp_table_keys_record, true},
+    {"BINLOG_PERSISTENT_TASK_INFO", binlog_persistent_task_info_fields_info,
+     fill_binlog_persistent_task_info, nullptr, nullptr, false},
+    {"BINLOG_PERSISTENT_SLICE_INDEX", binlog_persistent_index_slice_fields_info,
+     fill_binlog_persistent_index_file, nullptr, nullptr, false},
+    {"BINLOG_PERSISTENT_SLICES", binlog_persistent_slice_fields_info,
+     fill_binlog_persistent_slices, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOT_INDEX", innodb_persistent_snapshot_index_fields_info,
+     fill_mysql_innodb_persistent_index_file, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_INNODB_PERSISTENT_SNAPSHOTS", innodb_persistent_snapshot_fields_info,
+     fill_mysql_innodb_persistent_files, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOT_INDEX", se_persistent_snapshot_index_fields_info,
+     fill_se_backup_persistent_index_file, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_SMARTENGINE_PERSISTENT_SNAPSHOTS", se_persistent_snapshot_fields_info,
+     fill_se_backup_persistent_files, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_PERSISTENT_SNAPSHOT_INDEX",
+     consisent_persistent_snapshot_index_fields_info,
+     fill_consistent_snapshot_persistent_index_file, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_PERSISTENT_TASK_INFO",
+     consisent_persistent_snapshot_task_info,
+     fill_consistent_snapshot_persistent_task_info, nullptr, nullptr, false},
+    {"CONSISTENT_SNAPSHOT_SMARTENGINE_EXTENT_SNAPSHOTS",
+     se_extent_snapshot_fields_info,
+     fill_se_extent_snapshot, nullptr, nullptr, false},
     {nullptr, nullptr, nullptr, nullptr, nullptr, false}};
 
 int initialize_schema_table(st_plugin_int *plugin) {

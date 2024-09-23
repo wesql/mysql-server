@@ -210,6 +210,11 @@ void System_tables::add_remaining_dd_tables() {
   register_table("backup_sbt_history", system);
   register_table("columns_priv", system);
   register_table("component", system);
+#ifdef WESQL
+  register_table("consensus_info", system);
+  register_table("consensus_applier_info", system);
+  register_table("consensus_applier_worker", system);
+#endif
   register_table("db", system);
   register_table("default_roles", system);
   register_table("engine_cost", system);

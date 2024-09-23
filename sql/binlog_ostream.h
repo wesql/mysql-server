@@ -137,6 +137,10 @@ class IO_CACHE_binlog_cache_storage : public Truncatable_ostream {
   bool flush() override { return false; }
   bool sync() override { return false; }
 
+#ifdef WESQL_CLUSTER
+  IO_CACHE *get_io_cache() { return &m_io_cache; }
+#endif
+
  private:
   IO_CACHE m_io_cache;
   my_off_t m_max_cache_size = 0;
@@ -231,6 +235,10 @@ class Binlog_cache_storage : public Basic_ostream {
      Returns true if binlog cache is empty.
   */
   bool is_empty() const { return length() == 0; }
+
+#ifdef WESQL_CLUSTER
+  IO_CACHE *get_io_cache() { return m_file.get_io_cache(); }
+#endif
 
  private:
   Truncatable_ostream *m_pipeline_head = nullptr;

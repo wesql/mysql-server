@@ -295,6 +295,12 @@ int channel_create(const char *channel, Channel_creation_info *channel_info) {
   if (!strcmp(channel_map.get_default_channel(), channel))
     return RPL_CHANNEL_SERVICE_DEFAULT_CHANNEL_CREATION_ERROR;
 
+#ifdef WESQL_CLUSTER
+  if (is_consensus_replication_enabled() &&
+      !strcmp(channel_map.get_consensus_replication_applier_channel(), channel))
+    return RPL_CHANNEL_SERVICE_DEFAULT_CHANNEL_CREATION_ERROR;
+#endif
+
   /* Service channels are not supposed to use sql_replica_skip_counter */
   mysql_mutex_lock(&LOCK_sql_replica_skip_counter);
   if (sql_replica_skip_counter > 0)

@@ -93,11 +93,13 @@
 #include "sql/auth/auth_acls.h"
 #include "sql/auth/auth_common.h"  // validate_user_plugins
 #include "sql/binlog.h"            // mysql_bin_log
+#include "sql/binlog_archive.h"    // Binlog_archive
 #include "sql/changestreams/apply/replication_thread_status.h"
 #include "sql/clone_handler.h"
 #include "sql/conn_handler/connection_handler_impl.h"  // Per_thread_connection_handler
 #include "sql/conn_handler/connection_handler_manager.h"  // Connection_handler_manager
 #include "sql/conn_handler/socket_connection.h"  // MY_BIND_ALL_ADDRESSES
+#include "sql/consistent_archive.h" // Consistent_archive
 #include "sql/derror.h"                          // read_texts
 #include "sql/discrete_interval.h"
 #include "sql/events.h"          // Events
@@ -151,6 +153,10 @@
 #include "storage/perfschema/pfs_server.h"
 #include "storage/perfschema/terminology_use_previous.h"
 #endif /* WITH_PERFSCHEMA_STORAGE_ENGINE */
+
+#ifdef WITH_SMARTENGINE
+#include "storage/smartengine/util/se_logger.h"
+#endif
 
 static constexpr const unsigned long DEFAULT_ERROR_COUNT{1024};
 static constexpr const unsigned long DEFAULT_SORT_MEMORY{256UL * 1024UL};
@@ -2233,6 +2239,16 @@ static Sys_var_ulong Sys_binlog_expire_logs_seconds(
     VALID_RANGE(0, 0xFFFFFFFF), DEFAULT(2592000), BLOCK_SIZE(1), NO_MUTEX_GUARD,
     NOT_IN_BINLOG, ON_CHECK(check_expire_logs_seconds), ON_UPDATE(nullptr));
 
+static Sys_var_ulonglong Sys_binlog_purge_size(
+    "binlog_purge_size",
+    "If non-zero, binary logs will be purged after total binlogs' size is "
+    "larger than binlog_purge_size. Purges happen at startup and at"
+    "binary log rotation. If expire_logs_days or binlog_expire_logs_seconds "
+    "is set, this option takes priority.",
+    GLOBAL_VAR(binlog_purge_size),
+    CMD_LINE(REQUIRED_ARG, OPT_BINLOG_PURGE_SIZE),
+    VALID_RANGE(0, std::numeric_limits<ulonglong>::max()), DEFAULT(0), BLOCK_SIZE(IO_SIZE));
+
 static Sys_var_bool Sys_binlog_expire_logs_auto_purge(
     "binlog_expire_logs_auto_purge",
     "Controls whether the server shall automatically purge binary log "
@@ -2784,6 +2800,9 @@ static Sys_var_ulong Sys_log_throttle_queries_not_using_indexes(
     ON_UPDATE(update_log_throttle_queries_not_using_indexes));
 
 static bool update_log_error_verbosity(sys_var *, THD *, enum_var_type) {
+#ifdef WITH_SMARTENGINE
+  mysql_set_se_info_log_level(log_error_verbosity);
+#endif
   return (log_builtins_filter_update_verbosity(log_error_verbosity) < 0);
 }
 
@@ -2952,6 +2971,19 @@ static bool fix_max_binlog_size(sys_var *, THD *, enum_var_type) {
     }
     channel_map.unlock();
   }
+
+#ifdef WESQL_CLUSTER
+  if (is_consensus_replication_enabled()) {
+    channel_map.wrlock();
+    for (mi_map::iterator it = channel_map.begin(CONSENSUS_REPLICATION_CHANNEL);
+         it != channel_map.end(CONSENSUS_REPLICATION_CHANNEL); it++) {
+      Master_info *mi = it->second;
+      if (mi != nullptr) mi->rli->relay_log.set_max_size(max_binlog_size);
+    }
+    channel_map.unlock();
+  }
+#endif
+
   return false;
 }
 static Sys_var_ulong Sys_max_binlog_size(
@@ -4176,6 +4208,22 @@ static bool check_slave_stopped(sys_var *self, THD *thd, set_var *var) {
       mysql_mutex_unlock(&mi->rli->run_lock);
     }
   }
+
+#ifdef WESQL_CLUSTER
+  if (is_consensus_replication_enabled()) {
+    for (mi_map::iterator it = channel_map.begin(CONSENSUS_REPLICATION_CHANNEL);
+         it != channel_map.end(CONSENSUS_REPLICATION_CHANNEL); it++) {
+      mi = it->second;
+      mysql_mutex_lock(&mi->rli->run_lock);
+      if (mi->rli->slave_running) {
+        my_error(ER_REPLICA_SQL_THREAD_MUST_STOP, MYF(0));
+        result = true;
+      }
+      mysql_mutex_unlock(&mi->rli->run_lock);
+    }
+  }
+#endif
+
   channel_map.unlock();
   return result;
 }
@@ -7532,6 +7580,14 @@ static Sys_var_charptr Sys_protocol_compression_algorithms(
     DEFAULT(const_cast<char *>(PROTOCOL_COMPRESSION_DEFAULT_VALUE)),
     NO_MUTEX_GUARD, NOT_IN_BINLOG,
     ON_CHECK(check_set_protocol_compression_algorithms), ON_UPDATE(nullptr));
+#ifdef WESQL
+static char *wesql_version_ptr = NULL;
+
+static Sys_var_charptr Sys_wesql_version(
+    "wesql_version", "Version of the WeSQL",
+    READ_ONLY GLOBAL_VAR(wesql_version_ptr), NO_CMD_LINE, IN_SYSTEM_CHARSET,
+    DEFAULT(WESQL_VERSION));
+#endif
 
 static bool check_set_require_row_format(sys_var *, THD *thd, set_var *var) {
   /*
@@ -7718,3 +7774,261 @@ static Sys_var_enum Sys_explain_format(
     SESSION_VAR(explain_format), CMD_LINE(OPT_ARG), explain_format_names,
     DEFAULT(static_cast<ulong>(Explain_format_type::TRADITIONAL)),
     NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(nullptr), ON_UPDATE(nullptr));
+
+static Sys_var_bool Sys_consistent_snapshot_archive(
+    "consistent_snapshot_archive",
+    "Indicate if consistent snapshot archive enable.",
+    NON_PERSIST GLOBAL_VAR(opt_consistent_snapshot_archive),
+    CMD_LINE(OPT_ARG), DEFAULT(true));
+
+static Sys_var_charptr Sys_consistent_snapshot_archive_dir(
+    "consistent_snapshot_archive_dir",
+    "The location path for consistent snapshot archive",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_consistent_snapshot_archive_dir),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(nullptr));
+
+static Sys_var_bool Sys_binlog_archive(
+    "binlog_archive", "Indicate if binlog archive enable.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_binlog_archive), CMD_LINE(OPT_ARG),
+    DEFAULT(true));
+
+static Sys_var_charptr Sys_binlog_archive_dir(
+    "binlog_archive_dir",
+    "The location path for binlog archive",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_binlog_archive_dir),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(nullptr));
+
+static Sys_var_bool Sys_binlog_archive_using_consensus_index(
+    "binlog_archive_using_consensus_index",
+    "Indicates whether to use the consensus index as the starting position"
+    " for resuming archive.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_binlog_archive_using_consensus_index),
+    CMD_LINE(OPT_ARG), DEFAULT(true));
+
+static Sys_var_bool Sys_binlog_archive_expire_auto_purge(
+    "binlog_archive_expire_auto_purge",
+    "Controls whether the server shall automatically purge persistent binary "
+    "log files or not. If this variable is set to FALSE then the server will "
+    "not purge persistent binary log files automatically.",
+    GLOBAL_VAR(opt_binlog_archive_expire_auto_purge), CMD_LINE(OPT_ARG),
+    DEFAULT(true));
+
+static Sys_var_ulong Sys_binlog_archive_expire_seconds(
+    "binlog_archive_expire_seconds",
+    "If non-zero, persistent binlog will be purged after "
+    "binlog_archive_expire_seconds"
+    " seconds. If zero, all binlog will be retained.",
+    GLOBAL_VAR(opt_binlog_archive_expire_seconds), CMD_LINE(REQUIRED_ARG),
+    VALID_RANGE(0, 0xFFFFFFFF), DEFAULT(2592000), BLOCK_SIZE(1));
+
+static Sys_var_ulong Sys_binlog_archive_slice_max_size(
+    "binlog_archive_slice_max_size",
+    "Binary log events will be persistent archived automatically "
+    "when the size exceeds this value.",
+    GLOBAL_VAR(opt_binlog_archive_slice_max_size), CMD_LINE(REQUIRED_ARG),
+    VALID_RANGE(IO_SIZE, 1024 * 1024L * 1024L), DEFAULT(4 * 1024L * 1024L),
+    BLOCK_SIZE(IO_SIZE));
+
+static Sys_var_ulong Sys_binlog_archive_period(
+    "binlog_archive_period",
+    "binlog persist to object store at the given period",
+    GLOBAL_VAR(opt_binlog_archive_period), CMD_LINE(REQUIRED_ARG),
+    VALID_RANGE(1, LONG_TIMEOUT), DEFAULT(3), BLOCK_SIZE(1));
+
+static Sys_var_bool Sys_consistent_snapshot_persistent_on_objectstore(
+    "consistent_snapshot_persistent_on_objectstore",
+    "Use object store to persist binlog and consistent snapshot.",
+    READ_ONLY NON_PERSIST
+        GLOBAL_VAR(opt_consistent_snapshot_persistent_on_objstore),
+    CMD_LINE(OPT_ARG), DEFAULT(true));
+
+static Sys_var_ulong Sys_consistent_snapshot_archive_period(
+    "consistent_snapshot_archive_period",
+    "A consistent snapshot is created to archive at the "
+    "given interval",
+    GLOBAL_VAR(opt_consistent_snapshot_archive_period), CMD_LINE(REQUIRED_ARG),
+    VALID_RANGE(2, LONG_TIMEOUT), DEFAULT(600), BLOCK_SIZE(1));
+
+static Sys_var_bool Sys_consistent_snapshot_expire_auto_purge(
+    "consistent_snapshot_expire_auto_purge",
+    "Controls whether the server shall automatically purge consistent snapshot "
+    "or not. If this variable is set to FALSE then the server will "
+    "not purge persistent consistent snapshot automatically.",
+    GLOBAL_VAR(opt_consistent_snapshot_expire_auto_purge), CMD_LINE(OPT_ARG),
+    DEFAULT(true));
+
+static Sys_var_ulong Sys_consistent_snapshot_expire_seconds(
+    "consistent_snapshot_expire_seconds",
+    "If non-zero, consistent snapshot will be purged after "
+    "consistent_snapshot_expire_seconds"
+    " seconds. If zero, only the latest consistent snapshot will be retained.",
+    GLOBAL_VAR(opt_consistent_snapshot_expire_seconds), CMD_LINE(REQUIRED_ARG),
+    VALID_RANGE(0, 0xFFFFFFFF), DEFAULT(0), BLOCK_SIZE(1));
+
+static const char *consistent_snapshot_tar_names[] = {"OFF", "TAR",
+                                                  "TAR_AND_COMPRESS", NullS};
+static Sys_var_enum Sys_consistent_snapshot_innodb_tar_mode(
+    "consistent_snapshot_innodb_tar_mode",
+    "Indicates if innodb clone data of consistent snapshots is in tar or "
+    "compressed mode.",
+    GLOBAL_VAR(opt_consistent_snapshot_innodb_tar_mode), CMD_LINE(REQUIRED_ARG),
+    consistent_snapshot_tar_names, DEFAULT(CONSISTENT_SNAPSHOT_NO_TAR));
+
+static Sys_var_enum Sys_consistent_snapshot_smartengine_tar_mode(
+    "consistent_snapshot_smartengine_tar_mode",
+    "Indicates if smartengine backup data of consistent snapshots is in tar or "
+    "compressed mode.",
+    GLOBAL_VAR(opt_consistent_snapshot_se_tar_mode), CMD_LINE(OPT_ARG),
+    consistent_snapshot_tar_names, DEFAULT(CONSISTENT_SNAPSHOT_NO_TAR));
+
+static Sys_var_bool Sys_consistent_snapshot_smartengine_backup_checkpoint(
+    "consistent_snapshot_smartengine_backup_checkpoint",
+    "Indicate  indicates whether to do a checkpoint before executing a "
+    "smartengine backup.",
+    GLOBAL_VAR(opt_consistent_snapshot_smartengine_backup_checkpoint),
+    CMD_LINE(OPT_ARG), DEFAULT(false));
+
+static Sys_var_bool Sys_recovery_from_objstore(
+    "recovery_from_objectstore",
+    "Recovery binlog and consistent snapshot from object store.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_recovery_from_objstore),
+    CMD_LINE(OPT_ARG), DEFAULT(true));
+
+static Sys_var_charptr Sys_recovery_consistent_snapshot_tmpdir(
+    "recovery_consistent_snapshot_tmpdir",
+    "The location temp path for consistent snapshot recovery from object "
+    "store.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_recovery_consistent_snapshot_tmpdir),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("recovery_tmp"));
+
+static Sys_var_bool Sys_recovery_consistent_snapshot_only(
+    "recovery_consistent_snapshot_only",
+    "Indicate whether to recover only consistent snapshot without binlog "
+    "archive recovery.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_recovery_consistent_snapshot_only),
+    CMD_LINE(OPT_ARG), DEFAULT(false));
+
+static Sys_var_charptr Sys_recovery_consistent_snapshot_timestamp(
+    "recovery_consistent_snapshot_timestamp",
+    "Consistent snapshot timestamp from object store used as the source of "
+    "recovery during instance.",
+    READ_ONLY NON_PERSIST
+        GLOBAL_VAR(opt_recovery_consistent_snapshot_timestamp),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(nullptr));
+
+static Sys_var_bool Sys_initialize_from_objstore(
+    "initialize_from_objectstore",
+    "Initialzie instance using binlog and consistent snapshot from object "
+    "store.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_from_objstore),
+    CMD_LINE(OPT_ARG), DEFAULT(false));
+
+static Sys_var_charptr Sys_initialize_objstore_provider(
+    "initialize_objectstore_provider",
+    "The provider of object store as the source of data during instance."
+    "If initialize_from_objectstore is true, it must not be "
+    "empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_provider),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("local"));
+
+static Sys_var_charptr Sys_initialize_objstore_region(
+    "initialize_objectstore_region",
+    "The region of object store as the source of data during instance "
+    "initialization."
+    "If initialize_from_objectstore is true, it must not be "
+    "empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_region),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("local_objstore_region"));
+
+static Sys_var_charptr Sys_initialize_objstore_endpoint(
+    "initialize_objectstore_endpoint",
+    "The endpoint of object store as the source of data during instance "
+    "initialization. "
+    "If initialize_from_objectstore is true, user can specify the endpoint of "
+    "object store. "
+    "Ususally it's need to provide on non-AWS environment.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_endpoint),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(nullptr));
+
+static Sys_var_bool Sys_initialize_objstore_use_https(
+    "initialize_objectstore_use_https",
+    "If initialize_from_objectstore is true, whether using https to connect to "
+    "objstore or not "
+    "as the source of data during instance initialization",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_use_https),
+    CMD_LINE(OPT_ARG), DEFAULT(false));
+
+static Sys_var_charptr Sys_initialize_objstore_bucket(
+    "initialize_objectstore_bucket",
+    "The object store bucket to store record as the source of data during "
+    "instance initialization. "
+    "If initialize_from_objectstore is true, it must not be "
+    "empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_bucket),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("objbucket"));
+
+static Sys_var_charptr Sys_initialize_cluster_objstore_id(
+    "initialize_cluster_objectstore_id",
+    "The identifier for data directory of source cluster in object store. "
+    "If initialize_from_objectstore is true, it must not be empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_cluster_objstore_id),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_data"));
+
+static Sys_var_bool Sys_enable_serverless(
+    "serverless", "Enable the serverless",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_serverless),
+    CMD_LINE(OPT_ARG), DEFAULT(true));
+
+static Sys_var_bool Sys_table_on_objstore(
+    "table_on_objectstore", "Use object store to store data in SmartEngine",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_table_on_objstore), CMD_LINE(OPT_ARG),
+    DEFAULT(true));
+
+static Sys_var_charptr Sys_objstore_provider(
+    "objectstore_provider",
+    "The provider of object store. "
+    "If serverless is enabled, objectstore_provider must not be empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_provider), CMD_LINE(REQUIRED_ARG),
+    IN_FS_CHARSET, DEFAULT("local"));
+
+static Sys_var_charptr Sys_objstore_region(
+    "objectstore_region",
+    "The region of object store. "
+    "If serverless is enabled, objectstore_region must not be empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_region), CMD_LINE(REQUIRED_ARG),
+    IN_FS_CHARSET, DEFAULT("local_objectstore_region"));
+
+static Sys_var_charptr Sys_objstore_endpoint(
+    "objectstore_endpoint",
+    "The endpoint of object store. "
+    "If need, user can specify the endpoint of object store. "
+    "Ususally it's need to provide on non-AWS environment.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_endpoint), CMD_LINE(REQUIRED_ARG),
+    IN_FS_CHARSET, DEFAULT(nullptr));
+
+static Sys_var_bool Sys_objstore_use_https(
+    "objectstore_use_https",
+    "Whether using https to connect to object store or not.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_use_https), CMD_LINE(OPT_ARG),
+    DEFAULT(false));
+
+static Sys_var_charptr Sys_objstore_bucket(
+    "objectstore_bucket",
+    "The object store bucket to store record. "
+    "If serverless is enabled, objectstore_bucket must not be empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_bucket), CMD_LINE(REQUIRED_ARG),
+    IN_FS_CHARSET, DEFAULT("objectstore_bucket"));
+
+static Sys_var_charptr Sys_objstore_mtr_test_bucket_dir(
+    "objectstore_mtr_test_bucket_dir",
+    "The object store bucket sub dir to store record. for mtr test only",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_mtr_test_bucket_dir),
+    CMD_LINE(OPT_ARG), IN_FS_CHARSET, DEFAULT(""));
+
+static Sys_var_charptr Sys_cluster_objstore_id(
+    "cluster_objectstore_id",
+    "The identifier for data directory in object store. To ensure data "
+    "consistency by accessing the object using the key with the prefix that "
+    "includes this id. If serverless is enabled, it must not be empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_cluster_objstore_id),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_data"));

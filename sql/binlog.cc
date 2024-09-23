@@ -40,6 +40,7 @@
 #include "my_thread.h"
 #include "sql/check_stack.h"
 #include "sql/clone_handler.h"
+#include "sql/consistent_recovery.h"
 #include "sql/raii/thread_stage_guard.h"
 #include "sql_string.h"
 #include "template_utils.h"
@@ -546,6 +547,16 @@ class MYSQL_BIN_LOG::Binlog_ofile : public Basic_ostream {
     m_position = offset;
     return false;
   }
+
+#ifdef WESQL_CLUSTER
+  bool seek(my_off_t offset) {
+    assert(m_pipeline_head != nullptr);
+
+    if (m_pipeline_head->seek(offset)) return true;
+    m_position = offset;
+    return false;
+  }
+#endif
 
   bool flush() { return m_pipeline_head->flush(); }
   bool sync() { return m_pipeline_head->sync(); }
@@ -1746,6 +1757,14 @@ bool MYSQL_BIN_LOG::write_transaction(THD *thd, binlog_cache_data *cache_data,
   DBUG_PRINT("info",
              ("transaction_length= %llu", gtid_event.transaction_length));
 
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager)) {
+    return RUN_HOOK(
+        binlog_manager, write_transaction,
+        (thd, this, &gtid_event, cache_data, writer->is_checksum_enabled()));
+  }
+#endif
+
   bool ret = gtid_event.write(writer);
   if (ret) goto end;
 
@@ -1777,8 +1796,12 @@ int MYSQL_BIN_LOG::gtid_end_transaction(THD *thd) {
 
   if (thd->owned_gtid.sidno > 0) {
     assert(thd->variables.gtid_next.type == ASSIGNED_GTID);
-
-    if (!opt_bin_log || (thd->slave_thread && !opt_log_replica_updates)) {
+    if (!opt_bin_log ||
+#ifdef WESQL_CLUSTER
+        (thd->slave_thread &&
+         thd->consensus_context.consensus_replication_applier) ||
+#endif
+        (thd->slave_thread && !opt_log_replica_updates)) {
       /*
         If the binary log is disabled for this thread (either by
         log_bin=0 or sql_log_bin=0 or by log_replica_updates=0 for a
@@ -3202,13 +3225,23 @@ bool purge_source_logs_to_file(THD *thd, const char *to_log) {
     case Shared_backup_lock_guard::Lock_result::oom:
       return purge_error_message(thd, LOG_INFO_MEM);
   }
-
+  
   char search_file_name[FN_REFLEN];
   constexpr auto auto_purge{false};
   constexpr auto include_to_log{false};
   constexpr auto need_index_lock{true};
   constexpr auto need_update_threads{true};
   mysql_bin_log.make_log_name(search_file_name, to_log);
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager)) {
+    auto purge_error =
+        RUN_HOOK(binlog_manager, purge_logs, (0, 0, search_file_name, false));
+    if (!purge_error) my_ok(thd);
+    return purge_error != 0;
+  }
+#endif
+
   auto purge_error = mysql_bin_log.purge_logs(
       search_file_name, include_to_log, need_index_lock, need_update_threads,
       nullptr, auto_purge);
@@ -3242,6 +3275,15 @@ bool purge_source_logs_before_date(THD *thd, time_t purge_time) {
     case Shared_backup_lock_guard::Lock_result::oom:
       return purge_error_message(thd, LOG_INFO_MEM);
   }
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager)) {
+    auto purge_error =
+        RUN_HOOK(binlog_manager, purge_logs, (purge_time, 0, nullptr, false));
+    if (!purge_error) my_ok(thd);
+    return purge_error != 0;
+  }
+#endif
 
   // purge
   constexpr auto auto_purge{false};
@@ -3365,6 +3407,9 @@ bool show_binlog_events(THD *thd, MYSQL_BIN_LOG *binary_log) {
   DBUG_TRACE;
 
   assert(thd->lex->sql_command == SQLCOM_SHOW_BINLOG_EVENTS ||
+#ifdef WESQL_CLUSTER
+         thd->lex->sql_command == SQLCOM_SHOW_CONSENSUSLOG_EVENTS ||
+#endif
          thd->lex->sql_command == SQLCOM_SHOW_RELAYLOG_EVENTS);
 
   if (binary_log->is_open()) {
@@ -3515,6 +3560,9 @@ MYSQL_BIN_LOG::MYSQL_BIN_LOG(uint *sync_period, bool relay_log)
       sync_period_ptr(sync_period),
       sync_counter(0),
       is_relay_log(relay_log),
+#ifdef WESQL_CLUSTER
+      is_consensus_write(false),  // writed by consensus module
+#endif
       checksum_alg_reset(binary_log::BINLOG_CHECKSUM_ALG_UNDEF),
       relay_log_checksum_alg(binary_log::BINLOG_CHECKSUM_ALG_UNDEF),
       previous_gtid_set_relaylog(nullptr),
@@ -4263,6 +4311,10 @@ static enum_read_gtids_from_binlog_status read_gtids_from_binlog(
     switch (ev->get_type_code()) {
       case binary_log::FORMAT_DESCRIPTION_EVENT:
       case binary_log::ROTATE_EVENT:
+#ifdef WESQL_CLUSTER
+      case binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT:
+      case binary_log::CONSENSUS_LOG_EVENT:
+#endif
         // do nothing; just accept this event and go to next
         break;
       case binary_log::PREVIOUS_GTIDS_LOG_EVENT: {
@@ -4555,7 +4607,7 @@ bool MYSQL_BIN_LOG::init_gtid_sets(Gtid_set *all_gtids, Gtid_set *lost_gtids,
 
   Checkable_rwlock *sid_lock =
       is_relay_log ? all_gtids->get_sid_map()->get_sid_lock() : global_sid_lock;
-  /*
+/*
     If this is a relay log, we must have the IO thread Master_info trx_parser
     in order to correctly feed it with relay log events.
   */
@@ -4910,6 +4962,17 @@ bool MYSQL_BIN_LOG::open_binlog(
 
   Format_description_log_event s;
 
+#ifdef WESQL_CLUSTER
+  if (!is_relay_log && !NO_HOOK(binlog_manager)) {
+    if (RUN_HOOK(binlog_manager, new_file,
+                 (this, log_file_name, null_created_arg, need_sid_lock,
+                  extra_description_event, write_file_name_to_index_file))) {
+      goto err;
+    }
+    goto after_init_file;
+  }
+#endif
+
   if (m_binlog_file->is_empty()) {
     /*
       The binary log file was empty (probably newly created)
@@ -5060,6 +5123,10 @@ bool MYSQL_BIN_LOG::open_binlog(
     bytes_written += extra_description_event->common_header->data_written;
   }
   if (m_binlog_file->flush_and_sync()) goto err;
+
+#ifdef WESQL_CLUSTER
+after_init_file:
+#endif
 
   if (write_file_name_to_index_file) {
     DBUG_EXECUTE_IF("crash_create_critical_before_update_index",
@@ -6009,6 +6076,14 @@ int MYSQL_BIN_LOG::purge_logs(const char *to_log, bool included,
     goto err;
   }
 
+#ifdef WESQL_CLUSTER
+  if (!is_relay_log && !NO_HOOK(binlog_manager)) {
+    error = RUN_HOOK(binlog_manager, after_purge_file,
+                     (this, log_info.log_file_name));
+    goto err;
+  }
+#endif
+
   // Update gtid_state->lost_gtids
   if (!is_relay_log) {
     global_sid_lock->wrlock();
@@ -6540,7 +6615,11 @@ int MYSQL_BIN_LOG::new_file_impl(
     goto end;
   }
 
-  if (!is_relay_log) {
+  if (!is_relay_log
+#ifdef WESQL_CLUSTER
+      && !is_consensus_write
+#endif
+  ) {
     /* Save set of GTIDs of the last binlog into table on binlog rotation */
     if ((error = gtid_state->save_gtids_of_last_binlog_into_table())) {
       if (error == ER_RPL_GTID_TABLE_CANNOT_OPEN) {
@@ -6859,6 +6938,25 @@ bool MYSQL_BIN_LOG::truncate_update_log_file(const char *log_name,
       LogErr(ERROR_LEVEL, ER_BINLOG_CANT_CLEAR_IN_USE_FLAG_FOR_CRASHED_BINLOG);
       return false;
     }
+  }
+
+  return true;
+}
+
+bool update_log_file_set_flag_in_use(const char *log_name) {
+  std::unique_ptr<MYSQL_BIN_LOG::Binlog_ofile> ofile(
+      MYSQL_BIN_LOG::Binlog_ofile::open_existing(key_file_binlog, log_name, MYF(MY_WME)));
+
+  if (!ofile) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_OPEN_CRASHED_BINLOG);
+    return false;
+  }
+
+  /* Set LOG_EVENT_BINLOG_IN_USE_F */
+  uchar flags = 1;
+  if (ofile->update(&flags, 1, BIN_LOG_HEADER_SIZE + FLAGS_OFFSET)) {
+    LogErr(ERROR_LEVEL, ER_BINLOG_CANT_CLEAR_IN_USE_FLAG_FOR_CRASHED_BINLOG);
+    return false;
   }
 
   return true;
@@ -7198,6 +7296,14 @@ void MYSQL_BIN_LOG::auto_purge_at_server_startup() {
 
   auto purge_time = calculate_auto_purge_lower_time_bound();
   constexpr auto auto_purge{true};
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager)) {
+    (void)RUN_HOOK(binlog_manager, purge_logs, (purge_time, 0, nullptr, true));
+    return;
+  }
+#endif
+
   purge_logs_before_date(purge_time, auto_purge);
 }
 
@@ -7249,6 +7355,14 @@ void MYSQL_BIN_LOG::auto_purge() {
     is persisted inside storage engines.
   */
   ha_flush_logs();
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager)) {
+    (void)RUN_HOOK(binlog_manager, purge_logs, (purge_time, 0, nullptr, true));
+    return;
+  }
+#endif
+
   purge_logs_before_date(purge_time, auto_purge);
 }
 
@@ -7534,13 +7648,13 @@ bool MYSQL_BIN_LOG::write_incident(Incident_log_event *ev, THD *thd,
       cache_mngr->stmt_cache.reset();
       return error;
     }
-
+    
     if (need_lock_log)
       mysql_mutex_lock(&LOCK_log);
     else
       mysql_mutex_assert_owner(&LOCK_log);
-  }
-
+    }
+  
   if (do_flush_and_sync) {
     if (!error && !(error = flush_and_sync())) {
       bool check_purge = false;
@@ -7935,6 +8049,11 @@ int MYSQL_BIN_LOG::open_binlog(const char *opt_name) {
     return 1;
   }
 
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager))
+    return (RUN_HOOK(binlog_manager, binlog_recovery, (this)));
+#endif
+
   if (using_heuristic_recover()) {
     /* generate a new binlog to mask a corrupted one */
     mysql_mutex_lock(&LOCK_log);
@@ -8184,6 +8303,15 @@ TC_LOG::enum_result MYSQL_BIN_LOG::commit(THD *thd, bool all) {
   if (cache_mngr == nullptr) {
     if (!skip_commit && trx_coordinator::commit_in_engines(thd, all))
       return RESULT_ABORTED;
+#ifdef WESQL_CLUSTER
+    /* The consensus_replication_applier will not write binlog after applying
+     event and it will lost binlogged flag for xa prepare event.  */
+    else if (skip_commit && thd->slave_thread &&
+             thd->consensus_context.consensus_replication_applier) {
+      trx_coordinator::set_prepared_in_tc_in_engines(thd, all);
+      thd->get_transaction()->xid_state()->set_binlogged();
+    }
+#endif
     return RESULT_SUCCESS;
   }
 
@@ -8399,6 +8527,15 @@ TC_LOG::enum_result MYSQL_BIN_LOG::commit(THD *thd, bool all) {
     if (trx_coordinator::commit_in_engines(thd, all))
       return RESULT_INCONSISTENT;
   }
+#ifdef WESQL_CLUSTER
+  /* The consensus_replication_applier will not write binlog after applying
+   event and it will lost binlogged flag for xa prepare event.  */
+  else if (thd->slave_thread &&
+           thd->consensus_context.consensus_replication_applier) {
+    trx_coordinator::set_prepared_in_tc_in_engines(thd, all);
+    thd->get_transaction()->xid_state()->set_binlogged();
+  }
+#endif
 
   return RESULT_SUCCESS;
 }
@@ -8600,6 +8737,13 @@ void MYSQL_BIN_LOG::process_commit_stage_queue(THD *thd, THD *first) {
       m_dependency_tracker.update_max_committed(head);
       mysql_mutex_unlock(&LOCK_replica_trans_dep_tracker);
     }
+
+#ifdef WESQL_CLUSTER
+    /* before_finish_in_engines failed, ignore commit in engines */
+    if (RUN_HOOK(binlog_manager, before_finish_in_engines, (head, false)))
+      continue;
+#endif
+
     /*
       Flush/Sync error should be ignored and continue
       to commit phase. And thd->commit_error cannot be
@@ -8608,6 +8752,7 @@ void MYSQL_BIN_LOG::process_commit_stage_queue(THD *thd, THD *first) {
     assert(head->commit_error != THD::CE_COMMIT_ERROR);
     Thd_backup_and_restore switch_thd(thd, head);
     bool all = head->get_transaction()->m_flags.real_commit;
+
     assert(!head->get_transaction()->m_flags.commit_low ||
            head->get_transaction()->m_flags.ready_preempt);
     ::finish_transaction_in_engines(head, all, false);
@@ -8624,6 +8769,15 @@ void MYSQL_BIN_LOG::process_commit_stage_queue(THD *thd, THD *first) {
 
   for (THD *head = first; head; head = head->next_to_commit) {
     Thd_backup_and_restore switch_thd(thd, head);
+
+#ifdef WESQL_CLUSTER
+    /* before_finish_in_engines failed, ignore set prepared in engines */
+    if (RUN_HOOK(binlog_manager, before_finish_in_engines, (head, false))) {
+      if (head->get_transaction()->m_flags.xid_written) dec_prep_xids(head);
+      continue;
+    }
+#endif
+
     auto all = head->get_transaction()->m_flags.real_commit;
     // Mark transaction as prepared in TC, if applicable
     trx_coordinator::set_prepared_in_tc_in_engines(head, all);
@@ -8780,7 +8934,17 @@ int MYSQL_BIN_LOG::finish_commit(THD *thd) {
   auto all = thd->get_transaction()->m_flags.real_commit;
   auto committed_low = thd->get_transaction()->m_flags.commit_low;
 
+#ifdef WESQL_CLUSTER
+  if (RUN_HOOK(binlog_manager, before_finish_in_engines, (thd, true))) {
+    if (committed_low || is_loggable_xa_prepare(thd))
+      (void)trx_coordinator::rollback_in_engines(thd, all);
+    if (!thd->owned_gtid_is_empty()) gtid_state->update_on_rollback(thd);
+    if (thd->get_transaction()->m_flags.xid_written) dec_prep_xids(thd);
+    goto finish;
+  }
+#endif
   assert(thd->commit_error != THD::CE_COMMIT_ERROR);
+
   ::finish_transaction_in_engines(thd, all, false);
 
   // If the ordered commit didn't updated the GTIDs for this thd yet
@@ -8806,6 +8970,11 @@ int MYSQL_BIN_LOG::finish_commit(THD *thd) {
     (void)RUN_HOOK(transaction, after_commit, (thd, all));
     thd->get_transaction()->m_flags.run_hooks = false;
   }
+
+#ifdef WESQL_CLUSTER
+finish:
+  (void)RUN_HOOK(binlog_manager, after_finish_commit, (thd));
+#endif
 
   DBUG_EXECUTE_IF("leaving_finish_commit", {
     const char act[] = "now SIGNAL signal_leaving_finish_commit";
@@ -8917,6 +9086,17 @@ int MYSQL_BIN_LOG::ordered_commit(THD *thd, bool all, bool skip_commit) {
   my_off_t total_bytes = 0;
   bool do_rotate = false;
 
+#ifdef WESQL_CLUSTER
+  /* run before_flush hook before assigning bgc ticket */
+  if (RUN_HOOK(binlog_manager, before_binlog_flush, (thd))) {
+    if (!skip_commit || is_loggable_xa_prepare(thd)) {
+      (void)trx_coordinator::rollback_in_engines(thd, all);
+    }
+    thd_get_cache_mngr(thd)->reset();
+    return thd->commit_error;
+  }
+#endif
+
   CONDITIONAL_SYNC_POINT_FOR_TIMESTAMP("before_assign_session_to_bgc_ticket");
   thd->rpl_thd_ctx.binlog_group_commit_ctx().assign_ticket();
 
@@ -8990,11 +9170,27 @@ int MYSQL_BIN_LOG::ordered_commit(THD *thd, bool all, bool skip_commit) {
   flush_error =
       process_flush_stage_queue(&total_bytes, &do_rotate, &wait_queue);
 
+#ifdef WESQL_CLUSTER
+  if (flush_error == 0) {
+    (void)RUN_HOOK(binlog_manager, after_queue_write, (wait_queue));
+  }
+#endif
+
   if (flush_error == 0 && total_bytes > 0)
     flush_error = flush_cache_to_file(&flush_end_pos);
   DBUG_EXECUTE_IF("crash_after_flush_binlog", DBUG_SUICIDE(););
 
   update_binlog_end_pos_after_sync = (get_sync_period() == 1);
+
+#ifdef WESQL_CLUSTER
+  bool delay_update_binlog_end_pos;
+  if (flush_error == 0) {
+    delay_update_binlog_end_pos = false;
+    (void)RUN_HOOK(binlog_manager, after_queue_flush,
+                   (wait_queue, delay_update_binlog_end_pos));
+    if (delay_update_binlog_end_pos) update_binlog_end_pos_after_sync = true;
+  }
+#endif
 
   /*
     If the flush finished successfully, we can call the after_flush
@@ -9061,6 +9257,15 @@ int MYSQL_BIN_LOG::ordered_commit(THD *thd, bool all, bool skip_commit) {
     std::pair<bool, bool> result = sync_binlog_file(false);
     sync_error = result.first;
   }
+
+#ifdef WESQL_CLUSTER
+  if (flush_error == 0 && sync_error == 0) {
+    delay_update_binlog_end_pos = false;
+    (void)RUN_HOOK(binlog_manager, after_queue_sync,
+                   (wait_queue, delay_update_binlog_end_pos));
+    if (delay_update_binlog_end_pos) update_binlog_end_pos_after_sync = false;
+  }
+#endif
 
   if (update_binlog_end_pos_after_sync && flush_error == 0 && sync_error == 0) {
     THD *tmp_thd = final_queue;
@@ -9158,6 +9363,13 @@ commit_stage:
       mysql_mutex_unlock(leave_mutex_before_commit_stage);
     if (flush_error == 0 && sync_error == 0)
       sync_error = call_after_sync_hook(final_queue);
+
+#ifdef WESQL_CLUSTER
+    if (flush_error == 0 && sync_error == 0) {
+      (void)RUN_HOOK(binlog_manager, after_enrolling_stage,
+                     (thd, this, Commit_stage_manager::COMMIT_STAGE));
+    }
+#endif
   }
 
   /*
@@ -9198,6 +9410,15 @@ commit_stage:
     */
 
     DEBUG_SYNC(thd, "ready_to_do_rotation");
+
+#ifdef WESQL_CLUSTER
+    (void)RUN_HOOK(binlog_manager, before_rotate_and_purge,
+                   (thd, this, do_rotate));
+    if (!do_rotate) {
+      return thd->commit_error == THD::CE_COMMIT_ERROR;
+    }
+#endif
+
     bool check_purge = false;
     mysql_mutex_lock(&LOCK_log);
     /*
@@ -9211,6 +9432,10 @@ commit_stage:
       thd->commit_error = THD::CE_COMMIT_ERROR;
     else if (check_purge)
       auto_purge();
+
+#ifdef WESQL_CLUSTER
+    (void)RUN_HOOK(binlog_manager, after_rotate_and_purge, (thd, this));
+#endif
   }
   /*
     flush or sync errors are handled above (using binlog_error_action).
@@ -9368,6 +9593,16 @@ inline void MYSQL_BIN_LOG::update_binlog_end_pos(const char *file,
   signal_update();
   unlock_binlog_end_pos();
 }
+
+#ifdef WESQL_CLUSTER
+void MYSQL_BIN_LOG::update_binlog_end_pos(my_off_t pos) {
+  lock_binlog_end_pos();
+  if (is_open() && (pos > atomic_binlog_end_pos))
+    atomic_binlog_end_pos = pos;
+  signal_update();
+  unlock_binlog_end_pos();
+}
+#endif
 
 bool THD::is_binlog_cache_empty(bool is_transactional) const {
   DBUG_TRACE;
@@ -11699,3 +11934,7 @@ mysql_declare_plugin(binlog){
     nullptr, /* config options                  */
     0,
 } mysql_declare_plugin_end;
+
+#ifdef WESQL_CLUSTER
+#include "sql/consensus_binlog.cc"
+#endif

@@ -1,6 +1,7 @@
 # This test runs all the perl unit test testing MTR libraries.
 # It runs the separate perl processes to not get any variables from the actual
 # MTR run. Only the environment is shared and used to extract needed paths.
+# You will need to install 'perl-core' rather than just 'perl' to run this case.
 
 --exec perl $MYSQL_TEST_DIR/lib/t/Base.t 2>&1
 --exec perl $MYSQL_TEST_DIR/lib/t/copytree.t 2>&1

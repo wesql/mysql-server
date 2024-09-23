@@ -37,6 +37,11 @@ const char *Multisource_info::default_channel = "";
 const char *Multisource_info::group_replication_channel_names[] = {
     "group_replication_applier", "group_replication_recovery"};
 
+#ifdef WESQL_CLUSTER
+const char *Multisource_info::consensus_replication_applier =
+    "consensus_replication_applier";
+#endif
+
 bool Multisource_info::add_mi(const char *channel_name, Master_info *mi) {
   DBUG_TRACE;
 
@@ -52,6 +57,10 @@ bool Multisource_info::add_mi(const char *channel_name, Master_info *mi) {
   replication_channel_map::iterator map_it;
   enum_channel_type type = is_group_replication_channel_name(channel_name)
                                ? GROUP_REPLICATION_CHANNEL
+#ifdef WESQL_CLUSTER
+                           : is_consensus_replication_channel_name(channel_name)
+                               ? CONSENSUS_REPLICATION_CHANNEL
+#endif
                                : SLAVE_REPLICATION_CHANNEL;
 
   map_it = rep_channel_map.find(type);
@@ -100,6 +109,13 @@ Master_info *Multisource_info::get_mi(const char *channel_name) {
   if (map_it ==
           rep_channel_map.end() ||  // If not a slave channel, maybe a group one
       it == map_it->second.end()) {
+#ifdef WESQL_CLUSTER
+   map_it = rep_channel_map.find(CONSENSUS_REPLICATION_CHANNEL);
+    if (map_it != rep_channel_map.end()) {
+      it = map_it->second.find(channel_name);
+      if (it != map_it->second.end()) return it->second;
+    }
+#endif
     map_it = rep_channel_map.find(GROUP_REPLICATION_CHANNEL);
     if (map_it == rep_channel_map.end()) {
       return nullptr;
@@ -187,6 +203,15 @@ bool Multisource_info::is_group_replication_channel_name(const char *channel,
     return !strcmp(channel, group_replication_channel_names[0]) ||
            !strcmp(channel, group_replication_channel_names[1]);
 }
+
+#ifdef WESQL_CLUSTER
+bool Multisource_info::is_consensus_replication_channel_name(
+    const char *channel) {
+  /* for capability */
+  if (!channel) return true;
+  return !strcmp(channel, consensus_replication_applier);
+}
+#endif
 
 #ifdef WITH_PERFSCHEMA_STORAGE_ENGINE
 

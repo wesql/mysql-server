@@ -105,6 +105,11 @@
 
 #include "sql/server_component/log_builtins_imp.h"
 
+#ifdef WITH_SMARTENGINE
+#include "storage/smartengine/core/monitoring/query_perf_context.h"
+#include "storage/smartengine/util/se_logger.h"
+#endif
+
 using std::max;
 using std::min;
 
@@ -1975,6 +1980,10 @@ bool reopen_error_log() {
     if (result)
       my_error(ER_DA_CANT_OPEN_ERROR_LOG, MYF(0), error_log_file, ".",
                ""); /* purecov: inspected */
+#ifdef WITH_SMARTENGINE
+    else if (mysql_reinit_se_log())
+      sql_print_error("Failed to re-initialize logger in smartengine: %s", error_log_file);
+#endif
   }
 
   return result;

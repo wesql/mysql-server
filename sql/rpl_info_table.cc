@@ -421,6 +421,87 @@ end:
   return error;
 }
 
+#ifdef WESQL_CLUSTER
+/**
+   Removes all records
+
+   @param nparam             number of fields in the table
+   @param param_schema       schema name
+   @param param_table        table name
+   @param nullable_bitmap    fields allowed to be null.
+
+   @return 0   on success
+           1   when a failure happens
+*/
+int Rpl_info_table::do_reset_all_info(uint nparam, const char *param_schema,
+                                      const char *param_table,
+                                      MY_BITMAP const *nullable_bitmap) {
+  int error = 0;
+  TABLE *table = nullptr;
+  sql_mode_t saved_mode;
+  Open_tables_backup backup;
+  Rpl_info_table *info = nullptr;
+  THD *thd = nullptr;
+  int handler_error = 0;
+
+  DBUG_TRACE;
+
+  if (!(info = new Rpl_info_table(nparam, param_schema, param_table, 0, nullptr,
+                                  nullable_bitmap)))
+    return 1;
+
+  thd = info->access->create_thd();
+  saved_mode = thd->variables.sql_mode;
+  ulonglong saved_options = thd->variables.option_bits;
+  thd->variables.option_bits &= ~OPTION_BIN_LOG;
+
+  /*
+    Opens and locks the rpl_info table before accessing it.
+  */
+  if (info->access->open_table(thd, to_lex_cstring(info->str_schema),
+                               to_lex_cstring(info->str_table),
+                               info->get_number_info(), TL_WRITE, &table,
+                               &backup)) {
+    error = 1;
+    goto end;
+  }
+
+  if (!(handler_error = table->file->ha_index_init(0, true))) {
+    if (info->verify_table_primary_key_fields(table)) {
+      error = 1;
+      table->file->ha_index_end();
+      goto end;
+    }
+
+    if (!(handler_error = table->file->ha_index_first(table->record[0]))) {
+      do {
+        if ((handler_error = table->file->ha_delete_row(table->record[0])))
+          break;
+      } while (!(handler_error = table->file->ha_index_next(table->record[0])));
+      if (handler_error != HA_ERR_END_OF_FILE) error = 1;
+    } else {
+      /*
+        Being reset table can be even empty, and that's benign.
+      */
+      if (handler_error != HA_ERR_END_OF_FILE) error = 1;
+    }
+
+    if (error) table->file->print_error(handler_error, MYF(0));
+    table->file->ha_index_end();
+  }
+end:
+  /*
+    Unlocks and closes the rpl_info table.
+  */
+  error = info->access->close_table(thd, table, &backup, error) || error;
+  thd->variables.sql_mode = saved_mode;
+  thd->variables.option_bits = saved_options;
+  info->access->drop_thd(thd);
+  delete info;
+  return error;
+}
+#endif
+
 enum_return_check Rpl_info_table::do_check_info() {
   TABLE *table = nullptr;
   sql_mode_t saved_mode;

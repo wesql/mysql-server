@@ -530,8 +530,14 @@ void Event_parse_data::check_originator_id(THD *thd) {
     DBUG_PRINT("info", ("Invoked object status set to SLAVESIDE_DISABLED."));
     if ((status == Event_parse_data::ENABLED) ||
         (status == Event_parse_data::DISABLED)) {
-      status = Event_parse_data::SLAVESIDE_DISABLED;
-      status_changed = true;
+#ifdef WESQL_CLUSTER
+      if (!thd->consensus_context.consensus_replication_applier) {
+#endif
+        status = Event_parse_data::SLAVESIDE_DISABLED;
+        status_changed = true;
+#ifdef WESQL_CLUSTER
+      }
+#endif
     }
     originator = thd->server_id;
   } else

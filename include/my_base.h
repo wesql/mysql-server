@@ -992,8 +992,16 @@ Information in the data-dictionary needs to be updated. */
 #define HA_ERR_SAMPLING_INIT_FAILED 208
 /** Too many sub-expression in search string */
 #define HA_ERR_FTS_TOO_MANY_NESTED_EXP 209
+
+#ifdef WITH_SMARTENGINE
+/** Unexpected nullptr in smartengine handler */
+#define HA_ERR_INVALID_NULL_ERROR 210
+/** Copy of last error number */
+#define HA_ERR_LAST 210
+#else
 /** Copy of last error number */
 #define HA_ERR_LAST 209
+#endif //end of WITH_SMARTENGINE
 
 /* Number of different errors */
 #define HA_ERR_ERRORS (HA_ERR_LAST - HA_ERR_FIRST + 1)

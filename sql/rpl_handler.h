@@ -424,6 +424,107 @@ class Binlog_relay_IO_delegate : public Delegate {
   void init_param(Binlog_relay_IO_param *param, Master_info *mi);
 };
 
+#ifdef WESQL_CLUSTER
+struct Binlog_applier_observer;
+struct Binlog_manager_observer;
+
+class Relay_log_info;
+class Rpl_applier_reader;
+class MYSQL_BIN_LOG;
+class Log_event;
+class Slave_job_group;
+class Gtid_log_event;
+class binlog_cache_data;
+class Format_description_log_event;
+
+#ifdef HAVE_PSI_RWLOCK_INTERFACE
+extern PSI_rwlock_key key_rwlock_Binlog_applier_delegate_lock;
+#endif
+
+class Binlog_applier_delegate : public Delegate {
+ public:
+  Binlog_applier_delegate()
+      : Delegate(
+#ifdef HAVE_PSI_RWLOCK_INTERFACE
+            key_rwlock_Binlog_applier_delegate_lock
+#endif
+        ) {
+  }
+
+  typedef Binlog_applier_observer Observer;
+
+  int rli_init_info(Relay_log_info *rli, bool force_retriever_gtid, bool &exit_init);
+  int rli_end_info(Relay_log_info *rli, bool &exit_end);
+  int before_start(Relay_log_info *rli, ulong u_workers);
+  int on_mts_recovery_groups(Relay_log_info *rli, bool &exit);
+  int on_mts_finalize_recovery(Relay_log_info *rli);
+  int after_stop(Relay_log_info *rli);
+  int before_read_next_event(Relay_log_info *rli, bool &applier_stop);
+  int before_apply_event(Relay_log_info *rli, Log_event *ev);
+  int on_mts_groups_assigned(Relay_log_info *rli, Slave_job_group *ptr_g);
+  int on_stmt_done(Relay_log_info *rli);
+  int on_commit_positions(Relay_log_info *rli, Slave_job_group *ptr_g,
+                          bool check_xa);
+  int on_rollback_positions(Relay_log_info *rli);
+  int on_checkpoint_routine(Relay_log_info *rli);
+  int reader_before_open(Relay_log_info *rli,
+                         Rpl_applier_reader *applier_reader);
+  int reader_before_read_event(Relay_log_info *rli,
+                               Rpl_applier_reader *applier_reader);
+  int reader_before_close(Relay_log_info *rli,
+                          Rpl_applier_reader *applier_reader);
+};
+
+
+#ifdef HAVE_PSI_RWLOCK_INTERFACE
+extern PSI_rwlock_key key_rwlock_Binlog_manager_delegate_lock;
+#endif
+
+class Binlog_manager_delegate : public Delegate {
+ public:
+  Binlog_manager_delegate()
+      : Delegate(
+#ifdef HAVE_PSI_RWLOCK_INTERFACE
+            key_rwlock_Binlog_manager_delegate_lock
+#endif
+        ) {
+  }
+
+  typedef Binlog_manager_observer Observer;
+
+  int binlog_recovery(MYSQL_BIN_LOG *binlog);
+  int after_binlog_recovery(MYSQL_BIN_LOG *binlog);
+  int gtid_recovery(MYSQL_BIN_LOG *binlog);
+  int new_file(MYSQL_BIN_LOG *binlog, const char *log_file_name,
+               bool null_created_arg, bool need_sid_lock,
+               Format_description_log_event *extra_description_event,
+               bool &write_file_name_to_index_file);
+  int after_purge_file(MYSQL_BIN_LOG *binlog, const char *log_file_name);
+  int before_binlog_flush(THD *thd);
+  int write_transaction(THD *thd, MYSQL_BIN_LOG *binlog,
+                        Gtid_log_event *gtid_event, binlog_cache_data *cache_data,
+                        bool have_checksum);
+  int after_queue_write(THD *thd);
+  int after_queue_flush(THD *thd, bool &delay_update_binlog_pos);
+  int after_queue_sync(THD *thd, bool &delay_update_binlog_pos);
+  int after_enrolling_stage(THD *thd, MYSQL_BIN_LOG *binlog, int stage);
+  int before_finish_in_engines(THD *thd, bool finish_commit);
+  int after_finish_commit(THD *thd);
+  int before_rotate_and_purge(THD *thd, MYSQL_BIN_LOG *binlog, bool &do_rotate);
+  int after_rotate_and_purge(THD *thd, MYSQL_BIN_LOG *binlog);
+
+  int rotate_and_purge(THD *thd, bool force_rotate);
+  int reencrypt_logs();
+  int purge_logs(ulong purge_time, ulong purge_size, const char *to_log,
+                 bool auto_purge);
+
+  int get_unique_index_from_pos(const char *log_file_name, my_off_t log_pos,
+                                uint64 &unique_index);
+  int get_pos_from_unique_index(uint64 unique_index, char *log_file_name,
+                                my_off_t &log_pos);
+};
+#endif
+
 int delegates_init();
 /**
   Verify that the replication plugins are ready and OK to be unloaded.
@@ -449,6 +550,11 @@ extern Binlog_storage_delegate *binlog_storage_delegate;
 extern Server_state_delegate *server_state_delegate;
 extern Binlog_transmit_delegate *binlog_transmit_delegate;
 extern Binlog_relay_IO_delegate *binlog_relay_io_delegate;
+
+#ifdef WESQL_CLUSTER
+extern Binlog_applier_delegate *binlog_applier_delegate;
+extern Binlog_manager_delegate *binlog_manager_delegate;
+#endif
 
 /*
   if there is no observers in the delegate, we can return 0

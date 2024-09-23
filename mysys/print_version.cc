@@ -74,3 +74,7 @@ void build_version(const std::string &progname, std::string *destination) {
                 << MACHINE_TYPE << " (" << MYSQL_COMPILATION_COMMENT << ")";
   *destination = output_buffer.str();
 }
+
+#ifdef WESQL
+void print_wesql_version() { printf("WeSQL Ver %s \n", WESQL_VERSION); }
+#endif

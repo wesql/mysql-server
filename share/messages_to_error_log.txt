@@ -12294,6 +12294,399 @@ ER_WARN_DEPRECATED_OR_BLOCKED_CIPHER
 #
 
 ################################################################################
+#
+# Start of WeSQL error messages intended to be logged to the server error log.
+# 25000 - 29999
+################################################################################
+
+start-error-number 25000
+
+ER_CONSENSUS_FATAL_ERROR
+  eng "Fatal error: %s"
+
+ER_CONSENSUS_REPLICATION_PLUGIN_NOT_INSTALLED
+  eng "Consensus Replication plugin is not installed."
+
+ER_CONSENSUS_CMD_LOG
+  eng "user:%s  host:%s sql:%s result:%d!!!"
+
+ER_CONSENSUS_BINLOG_RECOVERING_USING
+  eng "Consensus binlog recovering after a crash using %s to index %llu"
+
+ER_CONSENSUS_RPL_FAILED_TO_REGISTER_SERVER_STATE_OBSERVER
+  eng "Failure when registering the server state observers"
+
+ER_CONSENSUS_RPL_FAILED_TO_REGISTER_TRANS_STATE_OBSERVER
+  eng "Failure when registering the transactions state observers"
+
+ER_CONSENSUS_RPL_FAILED_TO_REGISTER_BINLOG_MANAGER_OBSERVER
+  eng "Failure when registering the binlog manager state observers"
+
+ER_CONSENSUS_RPL_FAILED_TO_REGISTER_APPLIER_OBSERVER
+  eng "Failure when registering the applier observers"
+
+ER_CONSENSUS_RPL_NEEDS_TRANSACTIONAL_TABLE
+  eng "Table %s does not use the transactional storage engine. This is not compatible with Consensus Replication."
+
+ER_CONSENSUS_RPL_IS_STOPPING
+  eng "Plugin 'consensus_replication' is stopping."
+
+ER_CONSENSUS_RPL_IS_STOPPED
+  eng "Plugin 'consensus_replication' has been stopped."
+
+ER_CONSENSUS_RPL_FAILED_TO_START_ON_BOOT
+  eng "Unable to start Consensus Replication on boot"
+
+ER_CONSENSUS_RPL_FAILED_TO_STOP_ON_PLUGIN_UNINSTALL
+  eng "Failure when stopping Consensus Replication on plugin uninstall"
+
+ER_CONSENSUS_RPL_FAILED_TO_UNREGISTER_SERVER_STATE_OBSERVER
+  eng "Failure when unregistering the server state observers"
+
+ER_CONSENSUS_RPL_FAILED_TO_UNREGISTER_TRANS_STATE_OBSERVER
+  eng "Failure when unregistering the transactions state observers"
+
+ER_CONSENSUS_RPL_FAILED_TO_UNREGISTER_BINLOG_MANAGER_OBSERVER
+  eng "Failure when unregistering the binlog manager observers"
+
+ER_CONSENSUS_RPL_FAILED_TO_UNREGISTER_APPLIER_OBSERVER
+  eng "Failure when unregistering the applier observers"
+
+ER_CONSENSUS_RPL_ALL_OBSERVERS_UNREGISTERED
+  eng "All Consensus Replication server observers have been successfully unregistered"
+
+ER_CONSENSUS_RPL_BINLOG_DISABLED
+  eng "Binlog must be enabled for Consensus Replication"
+
+ER_CONSENSUS_RPL_APPLIER_METADATA_REPO_MUST_BE_TABLE
+  eng "Consensus applier metadata repository must be set to TABLE."
+
+ER_CONSENSUS_RECOVERY_TRX_LOGS
+  eng "Consensus recovery %s, transaction id: %d, consensus index: %llu, state: %d",
+
+ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS
+  eng "Consensus recovery %s, transaction id: '%s', consensus index: %llu, state: %d",
+
+ER_CONSENSUS_LOG_RECOVERY_FINISHED
+  eng "Consensus log recovery finished, max committed index from storage engine: %llu, valid index: %llu, committed HWM index: %llu."
+
+ER_CONSENSUS_CONSIST_RECOVERY_INVALID_POSITION
+  eng "Found invalid recovery end position while recovering from consensus log file '%s', recovery end index: %llu, valid index: %llu, valid postion: %llu, file length: %llu."
+
+ER_CONSENSUS_MTS_RECOVERY_FINISHED
+  eng "MTS recovery HWM consensus index: %llu, checkpoint consensus index: %llu.",
+
+ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START
+  eng "Consensus recovery applier start index, recover status: %llu, first_index: %llu, start apply index: %llu, committed HWM index: %llu, applier index: %llu."
+
+ER_CONSENSUS_RECOVERY_APPLIED_INDEX_STOP
+  eng "Consensus recovery applier start index, recovered index: %llu."
+
+ER_CONSENSUS_FIND_LOG_ERROR
+  eng "Failed to find consensus log for index %llu when %s"
+
+ER_CONSENSUS_LOG_READ_FILE_ERROR
+  eng "Failed to read events from consensus log file '%s': %s."
+
+ER_CONSENSUS_LOG_FIND_INDEX_IN_FILE_ERROR
+  eng "Failed to find index %llu in file '%s'"
+
+ER_CONSENSUS_LOG_FIND_POSITION_ERROR
+  eng "Failed to find the position of the index %llu when %s"
+
+ER_CONSENSUS_LOG_READ_BY_INDEX_ERROR
+  eng "Failed to read consensus log by index, index: %llu"
+
+ER_CONSENSUS_LOG_RETRIEVE_LOW_BOUND_POS
+  eng "Retrieve low bound pos of index %llu from index %llu in consensus logs. pos: %llu, matched: %d"
+
+ER_CONSENSUS_LOG_FIND_NEXT_TRX_ERROR
+  eng "Failed to find next transaction index. index: %llu"
+
+ER_CONSENSUS_LOG_FIND_NEXT_TRX_LOG
+  eng "Consensus log find next transaction index. index: %llu, next transaction start index: %llu"
+
+ER_CONSENSUS_GET_NEXT_INDEX_FAILED
+  eng "Failed to retrieve next index from consensus log file: '%s'."
+
+ER_CONSENSUS_READ_MALFORMED_LOG
+  eng "Found invalid index sequence while reading from consensus log file '%s', target index: %llu, current index: %llu, start index: %llu"
+
+ER_CONSENSUS_LOG_UNEXPECTED_EVENT
+  eng "Consensus log file do not contain prev_consensus_log_ev, file: '%s'"
+
+ER_CONSENSUS_PURGE_BEFORE_TIME_LOG
+  eng "Purge consensus logs before time, time: %d, log file: '%s', target_index: %llu"
+
+ER_CONSENSUS_PURGE_BEFORE_FILE_LOG
+  eng "Purge consensus logs before log, log file: '%s', target_index: %llu"
+
+ER_CONSENSUS_PURGE_LOG_ERROR
+  eng "Failed to purge consensus logs, target_index: %llu, error: %s"
+
+ER_CONSENSUS_TRUNCATE_LOG
+  eng "Truncate consensus logs to file '%s', offset: %llu, consensus writing: %d"
+
+ER_CONSENSUS_LOG_TRUNCATE_FILES
+  eng "Truncate consensus log %s '%s'"
+
+ER_CONSENSUS_LOG_TRUNCATE_FILES_AFTER_ERROR
+  eng "Failed to truncate consensus log files after '%s'"
+
+ER_CONSENSUS_LOG_TRUNCATE_OFFSET_ERROR
+  eng "Failed to truncate consensus log file '%s' at %llu"
+
+ER_CONSENSUS_LOG_ROTATE_ERROR
+  eng "Failed to rotate consensus log when appending log entry."
+
+ER_CONSENSUS_LOG_ROTATE_IN_TRX_ERROR
+  eng "Failed to rotate consensus log, because the last consensus log entry is in middle of a large transaction."
+
+ER_CONSENSUS_LOG_MANAGER_LOG_OPS
+  eng "Consensus log manager %s log, index: %llu"
+
+ER_CONSENSUS_LOG_MANAGER_LOG_FILE_OPS
+  eng "Consensus log manager %s log, log file: '%s'"
+
+ER_CONSENSUS_GET_LOG_ENTRY_UNFLUSHED_ERROR
+  eng "Failed to get log entry, because the entry has not been flushed to disk. index: %llu, sync index: %llu"
+
+ER_CONSENSUS_LOG_ENTRY_NOT_FOUND_FROM_CACHE
+  eng "Unable to get the consensus log entry in the cache, starting prefetch. channel id: %llu, index: %llu"
+
+ER_CONSENSUS_LOG_RESET_PREVIOUS_GITD_SET_ERROR
+  eng "Failed to reset the previous_gtid_set of the consensus log"
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_LOG
+  eng "Consensus archive recovery started from '%s', last log index: %llu, recovery target time: %s"
+
+ER_CONSENSUS_ARCHIVE_LOG_RROCESS_LOG
+  eng "Consensus archive recovery is processing log file '%s', start index: %llu, expected next index: %llu"
+
+ER_CONSENSUS_ARCHIVE_LOG_NOT_CONTINUOUS_ERROR
+  eng "Consensus archive log file '%s' is not continuous with the previous. start index: %llu, expected next index: %llu"
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_IGNORE_LOG
+  eng "Consensus archive reocovery ingored log file '%s'. The end index %llu is less than %llu as expected."
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_TRUNCATE_LOG
+  eng "Consensus archive recovery truncated log to index %llu."
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_GENERATE_LOG
+  eng "Consensus archvie recovery generate a new binlog file from archive file '%s'."
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_ADVANCE_TERM
+  eng "Consensus archive recovery advanced log term to %llu",
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_ADVANCE_NEXT_INDEX
+  eng "Consensus archive recovery advanced the next index of consensus log, new binlog file: '%s', next index: %llu."
+
+ER_CONSENSUS_ARCHIVE_RECOVERY_REACHED_STOP_POINT
+  eng "Consensnsu archive recovery reached the log's stop point. next index: %llu."
+
+ER_CONSENSUS_STATE_LEADER_DEGRADED
+  eng "Consensus state leader degradation has %s, term: %llu, commit index: %llu"
+
+ER_CONSENSUS_STATE_FOLLOWER_UPGRADE
+  eng "Consensus state follower upgradation has %s, term: %llu, commit index: %llu"
+
+ER_CONSENSUS_STATE_FOLLOWER_CHANGE_TERM
+  eng "Consensus state follower changed term, term: %llu"
+
+ER_CONSENSUS_APPLIER_THREAD_START
+  eng "Consensus applier thread start, recover status: %lld, consensus start apply index: %llu, rli consensus index: %llu."
+
+ER_CONSENSUS_APPLIER_THREAD_STOP
+  eng "Consensus applier thread is terminated because of %s"
+
+ER_CONSENSUS_MTS_GROUP_RECOVERY_APPLIER_INFO_FOR_WORKER
+  eng "Consensus MTS group recovery applier info based on Worker-Id: %lu, group_relay_log_name: %s, group_relay_log_pos: %llu, consensus_apply_index: %llu."
+
+ER_CONSENSUS_APPLIER_START_POS
+  eng "Consensus applier start position, log file: '%s', pos: %llu, apply index: %llu."
+
+ER_CONSENSUS_APPLIER_CATCHUP
+  eng "Consensus applier reach stop position, consensus index: %llu, current term: %llu, stop term: %llu."
+
+ER_CONSENSUS_CREATE_METADATA_ERROR
+  eng "Failed to create metadata '%s': %s."
+
+ER_CONSENSUS_WRITE_METADATA_ERROR
+  eng "Failed to write consensus meta '%s'"
+
+ER_CONSENSUS_READ_METADATA_ERROR
+  eng "Failed to read consensus meta '%s'"
+
+ER_CONSENSUS_CHANGE_META_LOG
+  eng "Force change consensus meta successfully"
+
+ER_CONSENSUS_CHANGE_META_ERROR
+  eng "Failed to change consensus meta, because %s"
+
+ER_CONSENSUS_CREATE_THRERD_ERROR
+  eng "Failed to create thread: %s."
+
+ER_CONSENSUS_SERVER_NOT_READY
+  eng "The server is not allowed to do current operation."
+
+ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR
+  eng "Failed to flush binlog cache to the consensus log, because %s."
+
+ER_CONSENSUS_LOG_FLUSH_CACHE_LOG
+  eng "Flush binlog cache to the consensus log, current pos: %llu, payload size: %lu, index: %llu."
+
+ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED
+  eng "Failed to write a consensus log event"
+
+ER_CONSENSUS_LOG_WRITE_LARGE_EVENT
+  eng "Write a large event, event size: %llu, batches: %lu, current progress: %llu/%llu"
+
+ER_CONSENSUS_LOG_WRITE_EMPYT_LOG
+  eng "Write an empty entry for large event, current pos: %llu, empty log size: %lu, batch size: %llu, consensus_index: %llu, current event progress: %llu/%llu"
+
+ER_CONSENSUS_LOG_WRITE_LARGE_EVENT_PAYLOAD
+  eng "Write the payload entry for large event, current pos: %llu, batch size: %llu, payload start pos: %llu, payload size: %llu, consensus index: %llu, current progress: %llu/%llu"
+
+ER_CONSENSUS_LOG_WRITE_LARGE_TRX_ENTRY
+  eng "Write one entry for large transaction, current pos: %llu, batch_size %llu, index: %llu, current progress: %llu/%llu.",
+
+ER_CONSENSUS_LOG_WRITE_LARGE_TRX_END_ENTRY
+  eng "Write the end entry for large transaction, current pos: %llu, batch_size %llu, index: %llu.",
+
+ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_LOG
+  eng "Append one log entry to consensus log, current pos: %llu, payload start pos: %llu, index: %llu, flag: %#X"
+
+ER_CONSENSUS_LOG_APPEND_LARGE_EVENT_END_ENTRY
+  eng "Append the whole event to consensus log for the large event, size: %llu"
+
+ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_ERROR
+  eng "Failed to appen one log entry to the consensus log, because %s."
+
+ER_CONSENSUS_LOG_APPEND_TERM_MISMATCH
+  eng "Failed to append a consensus entry because of term mismatch, current term: %llu, entry term: %llu."
+
+ER_CONSENSUS_LOG_APPEND_INDEX_MISMATCH
+  eng "Failed to append a consensus entry because of index mismatch, current index: %llu, entry index: %llu."
+
+ER_COSENNSUS_FAILPOINT_ACTIVE
+  eng "Consensus libary failpoint '%s' is going to activate, type: %d, exec_count: %d, input_type: %d, probability: %1.2f"
+
+ER_COSENNSUS_FAILPOINT_DEACTIVE
+  eng "Consensus libary failpoint '%s' is going to deactivate"
+
+ER_CONSENSUS_LOG_RUN_PREFETCH
+  eng "Consensus log prefetch thread try to fetch, channel: %llu, index: %llu"
+
+ER_CONSENSUS_LOG_FINISH_PREFETCH
+  eng "Consensus log prefetch for channel %llu has reached the consensus index %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_ERROR
+  eng "Failed to prefetch consensus logs in file '%s', consensus index: %llu, start index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_STOPPED
+  eng "Consensus log prefetch has stopped, channel_id: %llu, stop_prefetch_flag: %d, from_beginning: %d"
+
+ER_CONSENSUS_LOG_PREFETCH_CACHE_ADD_OUT_OF_RANGE
+  eng "The consensus log to be added is not in the current prefetch cache range, channel_id: %llu, the first index: %llu, the last index: %llu, the required index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_CACHE_SHRINK
+  eng "Consensus log prefetch is full but still within the window. Shrunk the window temporarily. channel_id: %llu, the first index: %llu, the last index: %llu, the required index: %llu, the last request index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_CACHE_HIT_LARGE_TRX_TABLE
+  eng "Getting the consensus log from the prefetch cache's large trx table, index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_CACHE_SWAP_OUT
+  eng "The consensus log to be accessed has already been swapped out of the prefetch cache, channel_id %llu, the first index: %llu, the required index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_CACHE_OUT_OF_RANGE
+  eng "The consensus log to be accessed is out of range in the prefetch cache, channel_id: %llu, the last index: %llu, the required index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_CACHE_TRUNCATE
+  eng "Consensus prefetch cache %s truncate, channel_id: %llu, the first index of cache: %llu, the cache size: %u"
+
+ER_CONSENSUS_FIFO_CACHE_OUT_OF_RANGE
+  eng "Consensus log FIFO cache out of range, the max index: %llu, the required index: %llu"
+
+ER_CONSENSUS_FIFO_CACHE_TRUNCATE
+  eng "Consensus log FIFO cache %s truncate, the first index of cache: %llu, the cache size: %u"
+
+ER_CONSENSUS_FIFO_CACHE_SET_BLOB_INDEX
+  eng "Consensus log FIFO cache set lock_blob_index to %llu"
+
+ER_OBJSTORE_ID_CHECK_ERROR
+  eng "Failed to verify the ID of data directory in the object store with the specified cluster_objectstore_id: %s"
+
+ER_BINLOG_ARCHIVE_LOG
+  eng "Binlog archive: %s."
+
+ER_BINLOG_ARCHIVE_STARTUP
+  eng "Binlog archive startup: %s."
+
+ER_BINLOG_ARCHIVE_CREATE_OBJECT_STORE
+  eng "Binlog archive create object store: provider=%s region=%s endpoint=%s bucket=%s use_https=%s %s."
+
+ER_BINLOG_ARCHIVE_GET_OBJECT_TO_FILE
+  eng "Binlog archive get object: %s key=%s file=%s %s."
+
+ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_SLICE_FILE
+  eng "Binlog archive put binlog slice to object store: key=%s file=%s size=%lld %s."
+
+ER_BINLOG_ARCHIVE_PUT_OBJECT_FROM_BINLOG_INDEX_FILE
+  eng "Binlog archive put binlog index to object store: key=%s index_entry=%s %s."
+
+ER_BINLOG_ARCHIVE_LIST_OBJECT
+  eng "Binlog archive list object: %s key_prefix=%s %s."
+
+ER_BINLOG_ARCHIVE_OPEN_INDEX
+  eng "Binlog archive open index: %s  index=%s."
+
+ER_BINLOG_ARCHIVE_OPEN_INDEX_TERM_CHANGED
+  eng "Binlog archive open index term changed: %lld to %lld."
+
+ER_BINLOG_ARCHIVE_LOG_START
+  eng "Binlog archive: persistent mysql binlog %s/%lld"
+
+ER_BINLOG_ARCHIVE_LOG_SLICE
+  eng "Binlog archive: persistent binlog slice %s"
+
+ER_BINLOG_ARCHIVE_PURGE_LOG
+  eng "Binlog archive: purge persistent binlog %s"
+
+ER_CONSISTENT_SNAPSHOT_LOG
+   eng "Consistent snapshot: %s"
+
+ER_CONSISTENT_SNAPSHOT_ARCHIVE_THREAD_LOG
+   eng "Consistent snapshot archive thread: %s"
+
+ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG
+   eng "Consistent snapshot archive innodb: %s"
+
+ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG
+   eng "Consistent snapshot archive smartengine: %s"
+
+ER_CONSISTENT_SNAPSHOT_ARCHIVE_BINLOG_LOG
+   eng "Consistent snapshot archive binlog: %s"
+
+ER_CONSISTENT_SNAPSHOT_PURGE_LOG
+   eng "Consistent snapshot purge: %s"
+
+ER_CONSISTENT_SNAPSHOT_ARCHIVE_INDEX_LOG
+   eng "Consistent snapshot archive index: %s"
+
+ER_CONSISTENT_RECOVERY_LOG
+  eng "Consistent recovery: %s"
+
+ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG
+  eng "Consistent recovery get last persistent binlog consensus index: %s."
+
+ER_FORCE_DEFAULT_STORAGE_ENGINE_TO_SMARTENGINE
+  eng "Force to use smartengine as default storage engine in serverless mode, not %s."
+
+#
+# End of WeSQL error messages intended to be logged to the server error log.
+#
+
+################################################################################
 # Error numbers 50000 to 51999 are reserved. Please do not use them for
 # other error messages.
 ################################################################################

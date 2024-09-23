@@ -25,6 +25,8 @@
 #define LIBMYSQL_VERSION           "@VERSION@"
 #define LIBMYSQL_VERSION_ID         @MYSQL_VERSION_ID@
 
+#define WESQL_VERSION              "@WESQL_VERSION@"
+
 #ifndef LICENSE
 #define LICENSE                     GPL
 #endif /* LICENSE */

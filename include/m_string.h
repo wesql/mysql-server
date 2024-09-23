@@ -287,6 +287,8 @@ static constexpr int FLOATING_POINT_BUFFER{311 + DECIMAL_NOT_SPECIFIED};
 #define MY_GCVT_MAX_FIELD_WIDTH \
   (DBL_DIG + 4 + std::max(5, MAX_DECPT_FOR_F_FORMAT))
 
+extern char *int2str(long val, char *dst, int radix, int upcase);
+
 const char *str2int(const char *src, int radix, long lower, long upper,
                     long *val);
 longlong my_strtoll10(const char *nptr, const char **endptr, int *error);
@@ -312,6 +314,7 @@ static inline char *ullstr(longlong value, char *buff) {
 }
 
 #define STRING_WITH_LEN(X) (X), ((sizeof(X) - 1))
+#define C_STRING_WITH_LEN(X) ((const char *)(X)), ((sizeof(X) - 1))
 
 /**
   Skip trailing space (ASCII spaces only).

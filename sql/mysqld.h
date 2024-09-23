@@ -180,6 +180,9 @@ extern MYSQL_PLUGIN_IMPORT std::atomic<int32>
     connection_events_loop_aborted_flag;
 extern bool opt_no_dd_upgrade;
 extern long opt_upgrade_mode;
+#ifdef WESQL
+extern bool opt_upgrade_wesql;
+#endif
 extern bool opt_initialize;
 extern bool opt_safe_user_create;
 extern bool opt_local_infile, opt_myisam_use_mmap;
@@ -252,6 +255,7 @@ extern bool opt_using_transactions;
 extern ulong current_pid;
 extern ulong expire_logs_days;
 extern ulong binlog_expire_logs_seconds;
+extern ulonglong binlog_purge_size;
 extern bool opt_binlog_expire_logs_auto_purge;
 extern uint sync_binlog_period, sync_relaylog_period, sync_relayloginfo_period,
     sync_masterinfo_period, opt_mta_checkpoint_period, opt_mta_checkpoint_group;
@@ -542,6 +546,22 @@ extern PSI_socket_key key_socket_tcpip;
 extern PSI_socket_key key_socket_unix;
 extern PSI_socket_key key_socket_client_connection;
 
+#ifdef WESQL_CLUSTER
+extern PSI_cond_key key_consensus_info_data_cond;
+extern PSI_cond_key key_consensus_info_start_cond;
+extern PSI_cond_key key_consensus_info_stop_cond;
+extern PSI_cond_key key_consensus_info_sleep_cond;
+
+extern PSI_mutex_key key_consensus_info_data_lock;
+extern PSI_mutex_key key_consensus_info_run_lock;
+extern PSI_mutex_key key_consensus_info_sleep_lock;
+extern PSI_mutex_key key_consensus_info_thd_lock;
+
+extern PSI_rwlock_key key_LOCK_consensus_info;
+extern PSI_rwlock_key key_LOCK_consensus_applier_info;
+extern PSI_rwlock_key key_LOCK_consensus_applier_worker;
+#endif
+
 #endif /* HAVE_PSI_INTERFACE */
 
 /*
@@ -697,6 +717,51 @@ extern char default_binlogfile_name[FN_REFLEN];
 extern MYSQL_PLUGIN_IMPORT char pidfile_name[];
 
 #define mysql_tmpdir (my_tmpdir(&mysql_tmpdir_list))
+
+extern char *opt_cluster_objstore_id;
+extern bool consistent_recovery_consensus_recovery;
+extern uint64_t consistent_recovery_snapshot_end_binlog_position;
+extern uint64_t consistent_recovery_snasphot_end_consensus_index;
+extern char consistent_recovery_apply_stop_timestamp[MAX_DATETIME_FULL_WIDTH + 4];
+extern char consistent_recovery_consensus_truncated_end_binlog[FN_REFLEN + 1];
+extern my_off_t consistent_recovery_consensus_truncated_end_position;
+extern ulong opt_binlog_archive_slice_max_size;
+extern bool opt_binlog_archive;
+extern char *opt_binlog_archive_dir;
+extern bool opt_binlog_archive_using_consensus_index;
+extern bool opt_binlog_archive_expire_auto_purge;
+extern ulong opt_binlog_archive_expire_seconds;
+extern ulong opt_binlog_archive_period;
+extern char *opt_consistent_snapshot_archive_dir;
+extern bool opt_consistent_snapshot_persistent_on_objstore;
+extern bool opt_initialize_use_objstore;
+extern bool opt_consistent_snapshot_archive;
+extern ulong opt_consistent_snapshot_archive_period;
+extern bool opt_consistent_snapshot_expire_auto_purge;
+extern ulong opt_consistent_snapshot_expire_seconds;
+extern ulong opt_consistent_snapshot_se_tar_mode;
+extern ulong opt_consistent_snapshot_innodb_tar_mode;
+extern bool opt_consistent_snapshot_smartengine_backup_checkpoint;
+extern bool opt_recovery_from_objstore;
+extern char *opt_recovery_consistent_snapshot_tmpdir;
+extern bool opt_recovery_consistent_snapshot_only;
+extern char *opt_recovery_consistent_snapshot_timestamp;
+extern bool opt_initialize_from_objstore;
+extern char *opt_initialize_objstore_provider;
+extern char *opt_initialize_objstore_region;
+extern char *opt_initialize_objstore_endpoint;
+extern bool opt_initialize_objstore_use_https;
+extern char *opt_initialize_objstore_bucket;
+extern char *opt_initialize_cluster_objstore_id;
+
+extern MYSQL_PLUGIN_IMPORT bool opt_serverless;
+extern MYSQL_PLUGIN_IMPORT bool opt_table_on_objstore;
+extern MYSQL_PLUGIN_IMPORT char *opt_objstore_provider;
+extern MYSQL_PLUGIN_IMPORT char *opt_objstore_region;
+extern MYSQL_PLUGIN_IMPORT char *opt_objstore_endpoint;
+extern MYSQL_PLUGIN_IMPORT bool opt_objstore_use_https;
+extern MYSQL_PLUGIN_IMPORT char *opt_objstore_bucket;
+extern MYSQL_PLUGIN_IMPORT char *opt_objstore_mtr_test_bucket_dir;
 
 /*
   Server mutex locks and condition variables.

@@ -820,6 +820,10 @@ THD::THD(bool enable_plugins)
   */
   thr_lock_info_init(&lock_info, m_thread_id, &COND_thr_lock);
 
+#ifdef WESQL_CLUSTER
+  init_consensus_context(this);
+#endif
+
   m_internal_handler = nullptr;
   m_binlog_invoker = false;
   memset(&m_invoker_user, 0, sizeof(m_invoker_user));
@@ -2975,7 +2979,10 @@ bool THD::is_current_stmt_binlog_disabled() const {
 }
 
 bool THD::is_current_stmt_binlog_log_replica_updates_disabled() const {
-  return ((!opt_bin_log || (slave_thread && !opt_log_replica_updates)) ||
+  return (!opt_bin_log || (slave_thread && !opt_log_replica_updates) ||
+#ifdef WESQL_CLUSTER
+           (slave_thread && consensus_context.consensus_replication_applier) ||
+#endif
           !mysql_bin_log.is_open());
 }
 

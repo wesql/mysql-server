@@ -49,6 +49,9 @@
 */
 enum enum_channel_type {
   SLAVE_REPLICATION_CHANNEL,  // Master slave replication channels
+#ifdef WESQL_CLUSTER
+  CONSENSUS_REPLICATION_CHANNEL,
+#endif
   GROUP_REPLICATION_CHANNEL   // Group replication channels
 };
 

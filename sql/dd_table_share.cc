@@ -381,6 +381,13 @@ static bool prepare_share(THD *thd, TABLE_SHARE *share,
 
         field->set_flag(PART_KEY_FLAG);
         if (key == primary_key) {
+#ifdef WITH_SMARTENGINE
+          /**For smartengine, reload ha_table_flags after pk index setup_key_part_field,
+           because handler flag HA_PRIMARY_KEY_IN_READ_INDEX may be setted. That will
+           influence add pk parts info to sk info(add_pk_parts_to_sk), which optimizer
+           use to build min-max tree for covering index.*/
+          ha_option = handler_file->ha_table_flags();
+#endif
           field->set_flag(PRI_KEY_FLAG);
           /*
              If this field is part of the primary key and all keys contains

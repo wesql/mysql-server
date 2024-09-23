@@ -65,6 +65,11 @@
 #include "sql/trigger.h"  // Trigger
 #include "sql/trigger_def.h"
 
+#ifdef WESQL
+#include "scripts/sql_commands_system_tables_wesql.h"
+#include "scripts/sql_commands_system_tables_fix_wesql.h"
+#endif
+
 typedef ulonglong sql_mode_t;
 extern const char *mysql_sys_schema[];
 extern const char *fill_help_tables[];
@@ -954,6 +959,91 @@ bool I_S_upgrade_required() {
          dd::bootstrap::DD_bootstrap_ctx::instance().I_S_upgrade_done() ||
          opt_upgrade_mode == UPGRADE_FORCE;
 }
+
+#ifdef WESQL
+static bool create_wesql_tables(THD *thd) {
+  const char **query_ptr;
+
+  DBUG_EXECUTE_IF(
+      "schema_read_only",
+      if (dd::execute_query(thd, "CREATE SCHEMA schema_read_only") ||
+          dd::execute_query(thd, "ALTER SCHEMA schema_read_only READ ONLY=1") ||
+          dd::execute_query(thd, "CREATE TABLE schema_read_only.t(i INT)") ||
+          dd::execute_query(thd, "DROP SCHEMA schema_read_only") ||
+          dd::execute_query(thd, "CREATE TABLE IF NOT EXISTS S.upgrade(i INT)"))
+          assert(false););
+
+  if (ignore_error_and_execute(thd, "USE mysql")) {
+    LogErr(ERROR_LEVEL, ER_DD_UPGRADE_FAILED_FIND_VALID_DATA_DIR);
+    return true;
+  }
+
+  LogErr(INFORMATION_LEVEL, ER_SERVER_UPGRADE_MYSQL_TABLES);
+  for (query_ptr = &wesql_system_tables[0]; *query_ptr != nullptr;
+       query_ptr++)
+    if (ignore_error_and_execute(thd, *query_ptr)) return true;
+
+  return false;
+}
+
+static bool fix_wesql_tables(THD *thd) {
+  const char **query_ptr;
+
+  DBUG_EXECUTE_IF(
+      "schema_read_only",
+      if (dd::execute_query(thd, "CREATE SCHEMA schema_read_only") ||
+          dd::execute_query(thd, "ALTER SCHEMA schema_read_only READ ONLY=1") ||
+          dd::execute_query(thd, "CREATE TABLE schema_read_only.t(i INT)") ||
+          dd::execute_query(thd, "DROP SCHEMA schema_read_only") ||
+          dd::execute_query(thd, "CREATE TABLE IF NOT EXISTS S.upgrade(i INT)"))
+          assert(false););
+
+  if (ignore_error_and_execute(thd, "USE mysql")) {
+    LogErr(ERROR_LEVEL, ER_DD_UPGRADE_FAILED_FIND_VALID_DATA_DIR);
+    return true;
+  }
+
+  LogErr(INFORMATION_LEVEL, ER_SERVER_UPGRADE_MYSQL_TABLES);
+  for (query_ptr = &wesql_system_tables[0]; *query_ptr != nullptr;
+       query_ptr++)
+    if (ignore_error_and_execute(thd, *query_ptr)) return true;
+
+  LogErr(INFORMATION_LEVEL, ER_SERVER_UPGRADE_MYSQL_TABLES);
+  for (query_ptr = &wesql_system_tables_fix[0]; *query_ptr != nullptr;
+       query_ptr++)
+    if (ignore_error_and_execute(thd, *query_ptr)) return true;
+
+  return false;
+}
+
+bool initialize_wesql_schemas(THD *thd) {
+  Disable_autocommit_guard autocommit_guard(thd);
+  Bootstrap_error_handler bootstrap_error_handler;
+
+  Server_option_guard<bool> acl_guard(&opt_noacl, true);
+  Server_option_guard<bool> general_log_guard(&opt_general_log, false);
+  Server_option_guard<bool> slow_log_guard(&opt_slow_log, false);
+  Disable_binlog_guard disable_binlog(thd);
+  Disable_sql_log_bin_guard disable_sql_log_bin(thd);
+
+  bootstrap_error_handler.set_log_error(false);
+  bool err = false;
+
+  if (thd->system_thread == SYSTEM_THREAD_SERVER_INITIALIZE) {
+    sysd::notify("STATUS=WeSQL schema create in progress\n");
+    err = create_wesql_tables(thd);
+  } else if (thd->system_thread == SYSTEM_THREAD_SERVER_UPGRADE) {
+    sysd::notify("STATUS=WeSQL schema upgrade in progress\n");
+    err = fix_wesql_tables(thd);
+  }
+
+  bootstrap_error_handler.set_log_error(true);
+
+  sysd::notify("STATUS=WeSQL schema process complete\n");
+
+  return dd::end_transaction(thd, err);
+}
+#endif
 
 }  // namespace upgrade
 }  // namespace dd

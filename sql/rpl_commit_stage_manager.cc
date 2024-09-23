@@ -33,6 +33,10 @@
 #include "sql/rpl_replica_commit_order_manager.h"  // Commit_order_manager
 #include "sql/rpl_rli_pdb.h"                       // Slave_worker
 
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_handler.h"
+#endif
+
 class Slave_worker;
 class Commit_order_manager;
 
@@ -314,7 +318,7 @@ bool Commit_stage_manager::enroll_for(StageID stage, THD *thd,
     case COMMIT_STAGE:
       DEBUG_SYNC(thd, "bgc_after_enrolling_for_commit_stage");
       CONDITIONAL_SYNC_POINT_FOR_TIMESTAMP("after_writing_to_tc_log");
-      break;
+    break;
     case AFTER_COMMIT_STAGE:
       DEBUG_SYNC(thd, "bgc_after_enrolling_for_after_commit_stage");
       CONDITIONAL_SYNC_POINT_FOR_TIMESTAMP(
@@ -329,6 +333,11 @@ bool Commit_stage_manager::enroll_for(StageID stage, THD *thd,
 
   DBUG_EXECUTE_IF("assert_leader", assert(leader););
   DBUG_EXECUTE_IF("assert_follower", assert(!leader););
+#endif
+
+#ifdef WESQL_CLUSTER
+  (void)RUN_HOOK(binlog_manager, after_enrolling_stage,
+                 (thd, &mysql_bin_log, stage));
 #endif
 
   /*

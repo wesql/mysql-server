@@ -127,6 +127,9 @@ class Multisource_info {
   static const char *default_channel;
   Master_info *default_channel_mi;
   static const char *group_replication_channel_names[];
+#ifdef WESQL_CLUSTER
+  static const char *consensus_replication_applier;
+#endif
 
   /**
     This lock was designed to protect the channel_map from adding or removing
@@ -232,6 +235,15 @@ class Multisource_info {
   */
   inline const char *get_default_channel() { return default_channel; }
 
+#ifdef WESQL_CLUSTER
+  /**
+    Get the default channel for this multisourced_slave;
+  */
+  inline const char *get_consensus_replication_applier_channel() {
+    return consensus_replication_applier;
+  }
+#endif
+
   /**
     Get the number of instances of Master_info in the map.
 
@@ -330,6 +342,19 @@ class Multisource_info {
   */
   bool is_group_replication_channel_name(const char *channel,
                                          bool is_applier = false);
+
+#ifdef WESQL_CLUSTER
+  /**
+    Returns if a channel name is one consensus replication names
+
+    @param channel    the channel name to test
+
+    @return
+      @retval      true   the name is a reserved name
+      @retval      false  non reserved name
+  */
+  bool is_consensus_replication_channel_name(const char *channel);
+#endif
 
   /**
      Forward iterators to initiate traversing of a map.

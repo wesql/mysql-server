@@ -1533,6 +1533,12 @@ class Relay_log_info : public Rpl_info {
 
   int count_relay_log_space();
 
+#ifdef WESQL_CLUSTER
+  int cli_init_info(bool force_retriever_gtid = false);
+  void cli_end_info();
+  int reset_previous_gtid_set_of_consensus_log();
+#endif
+
   /**
     Initialize the relay log info. This function does a set of operations
     on the rli object like initializing variables, loading information from

@@ -316,6 +316,10 @@ int ignored_error_code(int err_code);
 */
 #define LOG_EVENT_MTS_ISOLATE_F 0x200
 
+/**
+*/
+#define LOG_EVENT_CONSENSUS_F 0xF000
+
 /** @}*/
 
 /**
@@ -798,6 +802,26 @@ class Log_event {
   virtual Log_event_type get_type_code() const {
     return common_header->type_code;
   }
+
+#ifdef WESQL_CLUSTER
+  bool is_control_event() {
+    return common_header->type_code == binary_log::FORMAT_DESCRIPTION_EVENT ||
+           common_header->type_code ==
+               binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT ||
+           common_header->type_code == binary_log::PREVIOUS_GTIDS_LOG_EVENT ||
+           common_header->type_code == binary_log::CONSENSUS_LOG_EVENT ||
+           common_header->type_code == binary_log::ROTATE_EVENT;
+  }
+
+  /* event generate by consensus replication */
+  bool is_consensus_event() {
+    return common_header->type_code ==
+               binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT ||
+           common_header->type_code == binary_log::CONSENSUS_LOG_EVENT ||
+           common_header->type_code == binary_log::CONSENSUS_EMPTY_EVENT ||
+           common_header->type_code == binary_log::CONSENSUS_CLUSTER_INFO_EVENT;
+  }
+#endif
 
   /**
     Return true if the event has to be logged using SBR for DMLs.
@@ -4397,5 +4421,8 @@ std::pair<bool, binary_log::Log_event_basic_info> extract_log_event_basic_info(
 /**
   @} (end of group Replication)
 */
+#ifdef WESQL_CLUSTER
+#include "sql/consensus_log_event.h"
+#endif
 
 #endif /* _log_event_h */

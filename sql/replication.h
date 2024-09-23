@@ -728,6 +728,164 @@ typedef struct Binlog_relay_IO_observer {
   applier_log_event_t applier_log_event;
 } Binlog_relay_IO_observer;
 
+#ifdef WESQL_CLUSTER
+class binlog_cache_data;
+class Format_description_log_event;
+class Log_event;
+class MYSQL_BIN_LOG;
+class Gtid_log_event;
+class Relay_log_info;
+class Rpl_applier_reader;
+class Slave_job_group;
+class THD;
+
+/**
+   Binlog applier observer parameters
+ */
+typedef struct Binlog_applier_param {
+  Relay_log_info *rli;
+} Binlog_applier_param;
+
+typedef int (*rli_init_info_t)(Binlog_applier_param *param,
+                          bool force_retriever_gtid, bool &exit_init);
+typedef int (*rli_end_info_t)(Binlog_applier_param *param, bool &exit_end);
+typedef int (*before_start_t)(Binlog_applier_param *param, ulong n_workers);
+typedef int (*on_mts_finalize_recovery_t)(Binlog_applier_param *param);
+typedef int (*on_mts_recovery_groups_t)(Binlog_applier_param *param,
+                                        bool &exit);
+typedef int (*after_stop_t)(Binlog_applier_param *param);
+typedef int (*before_read_next_event_t)(Binlog_applier_param *param,
+                                        bool &applier_stop);
+typedef int (*before_apply_event_t)(Binlog_applier_param *param, Log_event *ev);
+typedef int (*on_mts_groups_assigned_t)(Binlog_applier_param *param,
+                                        Slave_job_group *ptr_g);
+typedef int (*on_stmt_done_t)(Binlog_applier_param *param);
+typedef int (*on_commit_positions_t)(Binlog_applier_param *param,
+                                     Slave_job_group *ptr_g, bool check_xa);
+typedef int (*on_rollback_positions_t)(Binlog_applier_param *param);
+typedef int (*on_checkpoint_routine_t)(Binlog_applier_param *param);
+typedef int (*reader_before_open_t)(Binlog_applier_param *param,
+                             Rpl_applier_reader *applier_reader);
+typedef int (*reader_before_read_event_t)(Binlog_applier_param *param,
+                              Rpl_applier_reader *applier_reader);
+typedef int (*reader_before_close_t)(Binlog_applier_param *param,
+                                        Rpl_applier_reader *applier_reader);
+
+/**
+   Observe binlog applier
+*/
+typedef struct Binlog_applier_observer {
+  uint32 len;
+
+  rli_init_info_t rli_init_info;
+  rli_end_info_t rli_end_info;
+  before_start_t before_start;
+  on_mts_recovery_groups_t on_mts_recovery_groups;
+  on_mts_finalize_recovery_t on_mts_finalize_recovery;
+  after_stop_t after_stop;
+  before_read_next_event_t before_read_next_event;
+  before_apply_event_t before_apply_event;
+  on_mts_groups_assigned_t on_mts_groups_assigned;
+  on_stmt_done_t on_stmt_done;
+  on_commit_positions_t on_commit_positions;
+  on_rollback_positions_t on_rollback_positions;
+  on_checkpoint_routine_t on_checkpoint_routine;
+  reader_before_open_t reader_before_open;
+  reader_before_read_event_t reader_before_read_event;
+  reader_before_close_t reader_before_close;
+} Binlog_applier_observer;
+
+/**
+   Binlog manager observer parameters
+ */
+typedef struct Binlog_manager_param {
+  THD *thd;
+  MYSQL_BIN_LOG *binlog;
+} Binlog_manager_param;
+
+typedef int (*binlog_recovery_t)(Binlog_manager_param *param);
+typedef int (*after_binlog_recovery_t)(Binlog_manager_param *param);
+typedef int (*gtid_recovery_t)(Binlog_manager_param *param);
+typedef int (*new_file_t)(Binlog_manager_param *param,
+                          const char *log_file_name, bool null_created_arg,
+                          bool need_sid_lock,
+                          Format_description_log_event *extra_description_event,
+                          bool &write_file_name_to_index_file);
+typedef int (*after_purge_file_t)(Binlog_manager_param *param,
+                                  const char *log_file_name);
+typedef int (*rotate_and_purge_t)(Binlog_manager_param *param,
+                                  bool force_rotate);
+typedef int (*purge_logs_t)(Binlog_manager_param *param, ulong purge_time,
+                            ulong purge_size, const char *to_log,
+                            bool auto_purge);
+typedef int (*reencrypt_logs_t)(Binlog_manager_param *param);
+typedef int (*before_binlog_flush_t)(Binlog_manager_param *param);
+typedef int (*write_transaction_t)(Binlog_manager_param *param,
+                                   Gtid_log_event *gtid_event,
+                                   binlog_cache_data *cache_data,
+                                   bool have_checksum);
+typedef int (*after_queue_write_t)(Binlog_manager_param *param);
+typedef int (*after_queue_flush_t)(Binlog_manager_param *param,
+                                   bool &delay_update_binlog_pos);
+typedef int (*after_queue_sync_t)(Binlog_manager_param *param,
+                                  bool &delay_update_binlog_pos);
+typedef int (*after_enrolling_stage_t)(Binlog_manager_param *param, int stage);
+typedef int (*before_finish_in_engines_t)(Binlog_manager_param *param,
+                                          bool finish_commit);
+typedef int (*after_finish_commit_t)(Binlog_manager_param *param);
+typedef int (*before_rotate_and_purge_t)(Binlog_manager_param *param,
+                                         bool &do_rotate);
+typedef int (*after_rotate_and_purge_t)(Binlog_manager_param *param);
+
+typedef int (*get_unique_index_from_pos_t)(Binlog_manager_param *,
+                                           const char *log_file_name,
+                                           my_off_t log_pos,
+                                           uint64 &unique_index);
+typedef int (*get_pos_from_unique_index_t)(Binlog_manager_param *,
+                                           uint64 unique_index,
+                                           char *log_file_name,
+                                           my_off_t &log_pos);
+
+/**
+   Observe binlog applier
+*/
+typedef struct Binlog_manager_observer {
+  uint32 len;
+
+  binlog_recovery_t binlog_recovery;
+  after_binlog_recovery_t after_binlog_recovery;
+  gtid_recovery_t gtid_recovery;
+  new_file_t new_file;
+  after_purge_file_t after_purge_file;
+  before_binlog_flush_t before_binlog_flush;
+  write_transaction_t  write_transaction;
+  after_queue_write_t after_queue_write;
+  after_queue_flush_t after_queue_flush;
+  after_queue_sync_t after_queue_sync;
+  after_enrolling_stage_t after_enrolling_stage;
+  before_finish_in_engines_t before_finish_in_engines;
+  after_finish_commit_t after_finish_commit;
+  before_rotate_and_purge_t before_rotate_and_purge;
+  after_rotate_and_purge_t after_rotate_and_purge;
+
+  rotate_and_purge_t rotate_and_purge;
+  purge_logs_t purge_logs;
+  reencrypt_logs_t reencrypt_logs;
+
+  get_unique_index_from_pos_t get_unique_index_from_pos;
+  get_pos_from_unique_index_t get_pos_from_unique_index;
+} Binlog_manager_observer;
+
+int register_binlog_applier_observer(Binlog_applier_observer *observer,
+                                     void *p);
+int unregister_binlog_applier_observer(Binlog_applier_observer *observer,
+                                       void *);
+int register_binlog_manager_observer(Binlog_manager_observer *observer,
+                                     void *p);
+int unregister_binlog_manager_observer(Binlog_manager_observer *observer,
+                                       void *);
+#endif
+
 /**
    Register a transaction observer
 

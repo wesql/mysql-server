@@ -46,6 +46,9 @@ enum enum_find_method { FIND_SCAN, FIND_KEY };
 
 class Rpl_info_table : public Rpl_info_handler {
   friend class Rpl_info_factory;
+#ifdef WESQL_CLUSTER
+  friend class Consensus_info_factory;
+#endif
 
  public:
   ~Rpl_info_table() override;
@@ -158,6 +161,11 @@ class Rpl_info_table : public Rpl_info_handler {
   static int do_reset_info(uint nparam, const char *param_schema,
                            const char *param_table, const char *channel_name,
                            MY_BITMAP const *nullable_bitmap);
+#ifdef WESQL_CLUSTER
+  static int do_reset_all_info(uint nparam, const char *param_schema,
+                               const char *param_table,
+                               MY_BITMAP const *nullable_bitmap);
+#endif
   int do_prepare_info_for_read() override;
   int do_prepare_info_for_write() override;
 

@@ -346,7 +346,14 @@ if ($CRC_RET_stmt_sidef) {
   --source include/assert.inc
 
   --let $assert_text= Only two events should exist in the binary log
-  --let $assert_cond= "[SHOW BINLOG EVENTS, Event_type, 3]" = "No such row"
+  if (!$USE_CONSENSUS_CLUSTER)
+  {
+    --let $assert_cond= "[SHOW BINLOG EVENTS, Event_type, 3]" = "No such row"
+  }
+  if ($USE_CONSENSUS_CLUSTER)
+  {
+    --let $assert_cond= "[SHOW BINLOG EVENTS, Event_type, 4]" = "No such row"
+  }
   --source include/assert.inc
   SET SQL_LOG_BIN = 1;
 
@@ -370,6 +377,17 @@ if ($CRC_RET_stmt_sidef) {
   if (`SELECT @@binlog_transaction_compression=TRUE`)
   {
     --let $tbl_map_event_pos = 6
+  }
+  if ($USE_CONSENSUS_CLUSTER)
+  {
+    #  1. Format_description_log_event
+    #  2. Previous_consensus_index_log_event
+    #  3. Previous_gtids_log_event
+    #  4. Consensus_log_event
+    #  5. Gtid_log_event
+    #  6. Query_event('BEGIN')
+    #  7. Table_map_log_event for the unsafe statement.
+    --let $tbl_map_event_pos =`SELECT $tbl_map_event_pos + 2`
   }
   --let $assert_text= Event should be a Table_map_log_event
   --let $assert_cond= "[SHOW BINLOG EVENTS, Event_type, $tbl_map_event_pos]" = "Table_map"

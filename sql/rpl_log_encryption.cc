@@ -43,6 +43,10 @@
 #include "sql/rpl_replica.h"
 #include "sql/server_component/mysql_server_keyring_lockable_imp.h"
 
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_handler.h"
+#endif
+
 Rpl_encryption rpl_encryption;
 
 void Rpl_encryption::report_keyring_error(Keyring_status error) {
@@ -645,6 +649,15 @@ bool Rpl_encryption::rotate_master_key(Key_rotation_step step,
           Rotate binary logs and re-encrypt previous existent
           binary logs.
         */
+#ifdef WESQL_CLUSTER
+        if (!NO_HOOK(binlog_manager)) {
+          if (DBUG_EVALUATE_IF("fail_to_rotate_binary_log", true, false) ||
+              RUN_HOOK(binlog_manager, rotate_and_purge, (current_thd, true))) {
+            goto err2;
+          }
+          if (RUN_HOOK(binlog_manager, reencrypt_logs, ())) return true;
+        } else
+#endif
         if (mysql_bin_log.is_open()) {
           if (DBUG_EVALUATE_IF("fail_to_rotate_binary_log", true, false) ||
               mysql_bin_log.rotate_and_purge(current_thd, true)) {
@@ -730,6 +743,14 @@ err2:
 
 void Rpl_encryption::rotate_logs(THD *thd) {
   DBUG_TRACE;
+
+#ifdef WESQL_CLUSTER
+  if (!NO_HOOK(binlog_manager)) {
+    if (RUN_HOOK(binlog_manager, rotate_and_purge, (thd, true)))
+      push_warning(thd, ER_RPL_ENCRYPTION_FAILED_TO_ROTATE_LOGS);
+    return;
+  }
+#endif
   if ((mysql_bin_log.is_open() && mysql_bin_log.rotate_and_purge(thd, true)) ||
       flush_relay_logs_cmd(thd)) {
     push_warning(thd, ER_RPL_ENCRYPTION_FAILED_TO_ROTATE_LOGS);

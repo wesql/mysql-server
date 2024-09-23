@@ -135,6 +135,9 @@ struct Slave_job_group {
 #endif
         last_committed(other.last_committed),
         sequence_number(other.sequence_number),
+#ifdef WESQL_CLUSTER
+        consensus_index(other.consensus_index),
+#endif
         new_fd_event(other.new_fd_event) {
   }
 
@@ -160,6 +163,9 @@ struct Slave_job_group {
 #endif
     last_committed = other.last_committed;
     sequence_number = other.sequence_number;
+#ifdef WESQL_CLUSTER
+    consensus_index = other.consensus_index;
+#endif
     new_fd_event = other.new_fd_event;
     return *this;
   }
@@ -202,6 +208,9 @@ struct Slave_job_group {
   /* Clock-based scheduler requirement: */
   longlong last_committed;   // commit parent timestamp
   longlong sequence_number;  // transaction's logical timestamp
+#ifdef WESQL_CLUSTER
+  uint64_t consensus_index;  // group's consensus index
+#endif
   /*
     After Coordinator has seen a new FD event, it sets this member to
     point to the new event, once per worker. Coordinator does so
@@ -253,6 +262,11 @@ struct Slave_job_group {
     sequence_number = SEQ_UNINIT;
     new_fd_event = nullptr;
   }
+#ifdef WESQL_CLUSTER
+  void reset_consensus_index(uint64 new_consensus_index) {
+    consensus_index = new_consensus_index;
+  }
+#endif
 };
 
 /**

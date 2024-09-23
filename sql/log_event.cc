@@ -930,6 +930,16 @@ const char *Log_event::get_type_str(Log_event_type type) {
       return "XA_prepare";
     case binary_log::PARTIAL_UPDATE_ROWS_EVENT:
       return "Update_rows_partial";
+#ifdef WESQL_CLUSTER
+    case binary_log::CONSENSUS_LOG_EVENT:
+      return "Consensus_log";
+    case binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT:
+      return "Previous_consensus_index";
+    case binary_log::CONSENSUS_CLUSTER_INFO_EVENT:
+      return "Consensus_cluster_info";
+    case binary_log::CONSENSUS_EMPTY_EVENT:
+      return "Consensus_empty";
+#endif
     case binary_log::TRANSACTION_PAYLOAD_EVENT:
       return "Transaction_payload";
     default:
@@ -1038,6 +1048,10 @@ inline int Log_event::do_apply_event_worker(Slave_worker *w) {
 int Log_event::do_update_pos(Relay_log_info *rli) {
   int error = 0;
   assert(!rli->belongs_to_client());
+
+#ifdef WESQL_CLUSTER
+  (void)RUN_HOOK(binlog_applier, on_stmt_done, (rli));
+#endif
 
   if (rli) error = rli->stmt_done(common_header->log_pos);
   return error;
@@ -1202,6 +1216,9 @@ bool Log_event::need_checksum() {
               which IO thread instantiates via queue_binlog_ver_3_event.
            */
            get_type_code() == binary_log::ROTATE_EVENT ||
+#ifdef WESQL_CLUSTER
+           get_type_code() == binary_log::PREVIOUS_CONSENSUS_INDEX_LOG_EVENT ||
+#endif
            /*
               The previous event has its checksum option defined
               according to the format description event.
@@ -2648,6 +2665,11 @@ Slave_worker *Log_event::get_slave_worker(Relay_log_info *rli) {
       rli->mts_groups_assigned++;
 
       rli->curr_group_isolated = false;
+
+#ifdef WESQL_CLUSTER
+      (void)RUN_HOOK(binlog_applier, on_mts_groups_assigned, (rli, &group));
+#endif
+
       group.reset(common_header->log_pos, rli->mts_groups_assigned);
       // the last occupied GAQ's array index
       gaq->assigned_group_index = gaq->en_queue(&group);
@@ -5669,6 +5691,9 @@ int Rotate_log_event::do_update_pos(Relay_log_info *rli) {
                       : rli->is_in_group();
 
   if ((server_id != ::server_id || rli->replicate_same_server_id) &&
+#ifdef WESQL_CLUSTER
+      !thd->consensus_context.consensus_replication_applier &&
+#endif
       !is_relay_log_event() && !in_group) {
     if (!is_mts_db_partitioned(rli) &&
         (server_id != ::server_id || rli->replicate_same_server_id)) {
@@ -6249,6 +6274,10 @@ int Xid_apply_log_event::do_apply_event(Relay_log_info const *rli) {
       goto err;
   }
 
+#ifdef WESQL_CLUSTER
+  (void)RUN_HOOK(binlog_applier, on_commit_positions, (rli_ptr, nullptr, true));
+#endif
+
   DBUG_PRINT(
       "info",
       ("do_apply group source %s %llu  group relay %s %llu event %s %llu\n",
@@ -6298,13 +6327,18 @@ int Xid_apply_log_event::do_apply_event(Relay_log_info const *rli) {
                       rli_ptr->get_group_master_log_pos(),
                       rli_ptr->get_group_relay_log_name(),
                       rli_ptr->get_group_relay_log_pos()));
+
   mysql_mutex_unlock(&rli_ptr->data_lock);
   error = do_commit(thd);
   mysql_mutex_lock(&rli_ptr->data_lock);
+
   if (error) {
     rli->report(ERROR_LEVEL, thd->get_stmt_da()->mysql_errno(),
                 "Error in Xid_log_event: Commit could not be completed, '%s'",
                 thd->get_stmt_da()->message_text());
+#ifdef WESQL_CLUSTER
+    (void)RUN_HOOK(binlog_applier, on_rollback_positions, (rli_ptr));
+#endif
   } else {
     DBUG_EXECUTE_IF(
         "crash_after_commit_before_update_pos",
@@ -10310,6 +10344,10 @@ int Rows_log_event::do_update_pos(Relay_log_info *rli) {
       Step the group log position if we are not in a transaction,
       otherwise increase the event log position.
     */
+#ifdef WESQL_CLUSTER
+    (void)RUN_HOOK(binlog_applier, on_stmt_done, (rli));
+#endif
+
     error = rli->stmt_done(common_header->log_pos);
   } else {
     rli->inc_event_relay_log_pos();
@@ -14340,3 +14378,7 @@ std::pair<bool, binary_log::Log_event_basic_info> extract_log_event_basic_info(
       uint2korr(buf + FLAGS_OFFSET) & LOG_EVENT_IGNORABLE_F;
   return std::make_pair(false, event_info);
 }
+
+#ifdef WESQL_CLUSTER
+#include "consensus_log_event.cc"
+#endif

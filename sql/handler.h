@@ -204,6 +204,15 @@ enum enum_alter_inplace_result {
   HA_ALTER_INPLACE_INSTANT
 };
 
+/**smartengine hton name*/
+#ifdef WITH_SMARTENGINE
+#ifdef WITH_XENGINE_COMPATIBLE_MODE
+#define SMARTENGINE_NAME "XENGINE"
+#else 
+#define SMARTENGINE_NAME "SMARTENGINE"
+#endif // end of WITH_XENGINE_COMPATIBLE_MODE
+#endif // end of WITH_SMARTENGINE
+
 /* Bits in table_flags() to show what database can do */
 
 #define HA_NO_TRANSACTIONS (1 << 0)     /* Doesn't support transactions */
@@ -668,6 +677,9 @@ enum legacy_db_type {
   /** Performance schema engine. */
   DB_TYPE_PERFORMANCE_SCHEMA,
   DB_TYPE_TEMPTABLE,
+#ifdef WITH_SMARTENGINE
+  DB_TYPE_SMARTENGINE,
+#endif
   DB_TYPE_FIRST_DYNAMIC = 42,
   DB_TYPE_DEFAULT = 127  // Must be last
 };
@@ -2287,6 +2299,48 @@ typedef void (*post_ddl_t)(THD *thd);
 */
 typedef void (*post_recover_t)(void);
 
+#ifdef WITH_SMARTENGINE
+/** do checkpoint for storage engine
+*/
+typedef int (*checkpoint_t)(THD *thd);
+
+/** Create a backup snapshot for storage engine.
+
+@param[out] backup_snapshot_id        Backup snapshot id to create.
+@param[out] binlog_file               Binlog file name.
+@param[out] binlog_file_offset        Binlog file offset.
+*/
+typedef int (*create_backup_snapshot_t)(THD *thd, uint64_t *backup_snapshot_id,
+                                        std::string &binlog_file,
+                                        uint64_t *binlog_file_offset);
+
+/** do incremental backup for storage engine
+*/
+typedef int (*incremental_backup_t)(THD *thd);
+
+/** Cleanup temporary backup directory for storage engine.
+ */
+typedef int (*cleanup_tmp_backup_dir_t)(THD *thd);
+
+/** Release a backup snapshot for storage engine.
+
+@param[in]  backup_snapshot_id        Backup snapshot id to release.
+*/
+typedef int (*release_backup_snapshot_t)(THD *thd, uint64_t backup_snapshot_id);
+
+/** List all backup snapshots for storage engine.
+
+@param[out] backup_snapshot_ids       Backup snapshot ids.
+ */
+typedef int (*list_backup_snapshots_t)(
+    THD *thd, std::vector<uint64_t> &backup_snapshot_ids);
+#endif
+
+/**
+  Perform SE-specific initialization after recovery of binlog/gtid.
+*/
+typedef void (*post_engine_recover_t)(void);
+
 /**
   Lock a handlerton (resource) log to collect log information.
 */
@@ -2762,6 +2816,18 @@ struct handlerton {
 
   post_ddl_t post_ddl;
   post_recover_t post_recover;
+#ifdef WITH_SMARTENGINE
+  post_engine_recover_t post_engine_recover;
+#endif
+
+#ifdef WITH_SMARTENGINE
+  checkpoint_t checkpoint;
+  create_backup_snapshot_t create_backup_snapshot;
+  incremental_backup_t incremental_backup;
+  cleanup_tmp_backup_dir_t cleanup_tmp_backup_dir;
+  release_backup_snapshot_t release_backup_snapshot;
+  list_backup_snapshots_t list_backup_snapshots;
+#endif
 
   /** Clone data transfer interfaces */
   Clone_interface_t clone_interface;
@@ -6867,6 +6933,10 @@ class handler {
     return false;
   }
 
+#ifdef WITH_SMARTENGINE
+  virtual Handler_share **get_ha_share_ref() { return ha_share; }
+#endif
+
   void set_ha_table(TABLE *table_arg) { table = table_arg; }
 
   int get_lock_type() const { return m_lock_type; }
@@ -7319,6 +7389,13 @@ int ha_recover(Xid_commit_list *commit_list = nullptr,
         or rolled back during recovery stage.
 */
 void ha_post_recover();
+
+#ifdef WITH_SMARTENGINE
+/**
+  Perform SE-specific initialization after recovery of binlog/gtid.
+*/
+void ha_post_engine_recover(void);
+#endif
 
 /*
  transactions: interface to low-level handlerton functions. These are

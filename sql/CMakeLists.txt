@@ -633,7 +633,25 @@ SET(SQL_SHARED_SOURCES
   xa/transaction_cache.cc
   xa/xid_extract.cc
   daemon_proxy_keyring/daemon_proxy_keyring.cc
+)
+
+IF(WITH_WESQL)
+  LIST(APPEND SQL_SHARED_SOURCES
+    common/component.cc
+    package/package.cc
+    package/package_cache.cc
+    package/package_common.cc
+    package/proc.cc
+    package/package_parse.cc
+    package/proc_dummy.cc
+    package/show_native_procedure.cc
   )
+  IF(WITH_CONSENSUS_REPLICATION)
+    LIST(APPEND SQL_SHARED_SOURCES
+      rpl_consensus_replication.cc
+    )
+  ENDIF()
+ENDIF()
 
 IF(BUILD_IS_SINGLE_CONFIG)
   GET_PROPERTY(CWD_DEFINITIONS DIRECTORY PROPERTY COMPILE_DEFINITIONS)
@@ -1003,6 +1021,8 @@ SET(BINLOG_SOURCE
   binlog/monitoring/context.cc
   binlog/decompressing_event_object_istream.cc
   binlog.cc
+  binlog_archive.cc
+  binlog_archive_command.cc
   binlog_istream.cc
   binlog_ostream.cc
   binlog_reader.cc
@@ -1011,6 +1031,9 @@ SET(BINLOG_SOURCE
   changestreams/misc/column_filters/column_filter_inbound_func_indexes.cc
   changestreams/misc/column_filters/column_filter_inbound_gipk.cc
   changestreams/misc/column_filters/column_filter_outbound_func_indexes.cc
+  consistent_archive.cc
+  consistent_recovery.cc
+  consistent_snapshot_command.cc
   log_event.cc
   rpl_commit_stage_manager.cc
   rpl_filter.cc
@@ -1089,6 +1112,16 @@ SET (RPL_REPLICA_SRCS
   udf_service_impl.cc
   udf_service_util.cc
   )
+
+IF(WITH_CONSENSUS_REPLICATION)
+  LIST(APPEND RPL_REPLICA_SRCS
+    consensus/consensus_info.cc
+    consensus/consensus_info_factory.cc
+    consensus/consensus_applier_info.cc
+    consensus/consensus_applier_worker.cc
+  )
+ENDIF()
+
 ADD_LIBRARY(rpl_replica STATIC ${RPL_REPLICA_SRCS})
 ADD_DEPENDENCIES(rpl_replica GenError)
 TARGET_LINK_LIBRARIES(rpl_replica

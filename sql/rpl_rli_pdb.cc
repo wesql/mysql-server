@@ -74,6 +74,10 @@
 #include "sql/transaction_info.h"
 #include "thr_mutex.h"
 
+#ifdef WESQL_CLUSTER
+#include "sql/rpl_handler.h"
+#endif
+
 #ifndef NDEBUG
 ulong w_rr = 0;
 uint mta_debug_concurrent_access = 0;
@@ -704,7 +708,14 @@ bool Slave_worker::commit_positions(Log_event *ev, Slave_job_group *ptr_g,
                   { mta_debug_concurrent_access++; };);
 
   m_flag_positions_committed = true;
+
+#ifdef WESQL_CLUSTER
+  bool ret = flush_info(force);
+  (void)RUN_HOOK(binlog_applier, on_commit_positions, (this, ptr_g, false));
+  return ret;
+#else
   return flush_info(force);
+#endif
 }
 
 void Slave_worker::rollback_positions(Slave_job_group *ptr_g) {

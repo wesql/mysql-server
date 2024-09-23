@@ -168,6 +168,9 @@ Note: YYTHD is passed as an argument to yyparse(), and subsequently to yylex().
 #include "sql_string.h"
 #include "thr_lock.h"
 #include "violite.h"
+#ifdef WESQL
+#include "sql/package/package_interface.h"  // find_native_proc_and_evoke
+#endif
 
 /* this is to get the bison compilation windows warnings out */
 #ifdef _MSC_VER
@@ -1419,6 +1422,11 @@ void warn_on_deprecated_user_defined_collation(
 %left KEYWORD_USED_AS_KEYWORD
 
 
+/* Tolens for consensus replication */
+%token<lexer.keyword> CONSENSUS_SYM 1220
+%token<lexer.keyword> CONSENSUSLOG_SYM 1221
+%token<lexer.keyword> CONSENSUS_REPLICATION 1222
+
 /*
   Resolve column attribute ambiguity -- force precedence of "UNIQUE KEY" against
   simple "UNIQUE" and "KEY" attributes:
@@ -2377,6 +2385,7 @@ simple_statement:
         | flush                         { $$= nullptr; }
         | get_diagnostics               { $$= nullptr; }
         | group_replication             { $$= nullptr; }
+        | consensus_replication         { $$= nullptr; }
         | grant                         { $$= nullptr; }
         | handler_stmt
         | help                          { $$= nullptr; }
@@ -3980,7 +3989,14 @@ sp_suid:
 call_stmt:
           CALL_SYM sp_name opt_paren_expr_list
           {
+#ifdef WESQL
+            if (($$ = im::find_native_proc_and_evoke(YYTHD, $2, $3))) {
+            } else {
+              $$ = NEW_PTN PT_call($2, $3);
+            }
+#else
             $$= NEW_PTN PT_call($2, $3);
+#endif
           }
         ;
 
@@ -9275,6 +9291,37 @@ replica:
       | REPLICA_SYM
       ;
 
+consensus_replication:
+                 START_SYM CONSENSUS_REPLICATION
+                 {
+#ifdef WESQL_CLUSTER
+                   LEX *lex=Lex;
+                   lex->sql_command = SQLCOM_START_CONSENSUS_REPLICATION;
+                   lex->type= 0;
+                   lex->slave_thd_opt= 0;
+                   lex->mi.channel= "";
+                   lex->mi.for_channel= false;
+                   lex->slave_connection.reset();
+#else
+                   MYSQL_YYABORT;
+#endif
+                 }
+               | STOP_SYM CONSENSUS_REPLICATION
+                 {
+#ifdef WESQL_CLUSTER
+                   LEX *lex=Lex;
+                   lex->sql_command = SQLCOM_STOP_CONSENSUS_REPLICATION;
+                   lex->type= 0;
+                   lex->slave_thd_opt= 0;
+                   lex->mi.channel= "";
+                   lex->mi.for_channel= false;
+                   lex->slave_connection.reset();
+#else
+                   MYSQL_YYABORT;
+#endif
+                 }
+               ;
+
 stop_replica_stmt:
           STOP_SYM replica opt_replica_thread_option_list opt_channel
           {
@@ -13658,6 +13705,14 @@ show_binary_logs_stmt:
           {
             $$ = NEW_PTN PT_show_binlogs(@$);
           }
+        | SHOW CONSENSUS_SYM LOGS_SYM
+          {
+#ifdef WESQL_CLUSTER
+            Lex->sql_command = SQLCOM_SHOW_CONSENSUSLOGS;
+#else
+            MYSQL_YYABORT;
+#endif
+          }
         ;
 
 show_replicas_stmt:
@@ -13678,6 +13733,17 @@ show_binlog_events_stmt:
           SHOW BINLOG_SYM EVENTS_SYM opt_binlog_in binlog_from opt_limit_clause
           {
             $$ = NEW_PTN PT_show_binlog_events(@$, $4, $6);
+          }
+        | SHOW CONSENSUSLOG_SYM EVENTS_SYM consensus_log_index_from opt_limit_clause
+          {
+#ifdef WESQL_CLUSTER
+            LEX *lex= Lex;
+            lex->sql_command= SQLCOM_SHOW_CONSENSUSLOG_EVENTS;
+            if ($5 != NULL)
+              CONTEXTUALIZE($5);
+#else
+            MYSQL_YYABORT;
+#endif
           }
         ;
 
@@ -13966,6 +14032,21 @@ opt_binlog_in:
 binlog_from:
           %empty { Lex->mi.pos = 4; /* skip magic number */ }
         | FROM ulonglong_num { Lex->mi.pos = $2; }
+        ;
+
+consensus_log_index_from:
+          %empty
+          {
+#ifdef WESQL_CLUSTER
+            Lex->consensus.log_index = 0;
+#endif
+          }
+        | FROM INDEX_SYM ulonglong_num
+          {
+#ifdef WESQL_CLUSTER
+            Lex->consensus.log_index = $3;
+#endif
+          }
         ;
 
 opt_wild_or_where:
@@ -15375,6 +15456,7 @@ ident_keywords_unambiguous:
         | GET_SOURCE_PUBLIC_KEY_SYM
         | GRANTS
         | GROUP_REPLICATION
+        | CONSENSUS_REPLICATION
         | GTID_ONLY_SYM
         | HASH_SYM
         | HISTOGRAM_SYM

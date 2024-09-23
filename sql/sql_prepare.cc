@@ -1419,6 +1419,10 @@ bool Prepared_statement::prepare_query(THD *thd) {
     case SQLCOM_SHOW_TRIGGERS:
     case SQLCOM_SHOW_VARIABLES:
     case SQLCOM_SET_RESOURCE_GROUP:
+#ifdef WESQL
+    case SQLCOM_ADMIN_PROC:
+    case SQLCOM_TRANS_PROC:
+#endif
     case SQLCOM_SHOW_WARNS:
       res = m_lex->m_sql_cmd->prepare(thd);
       break;

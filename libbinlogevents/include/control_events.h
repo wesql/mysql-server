@@ -47,6 +47,9 @@
 #include "compression/base.h"  // binary_log::transaction::compression::type
 #include "template_utils.h"
 #include "uuid.h"
+#ifdef WESQL_CLUSTER
+#include "control_consensus_events.h"  // consensus events defination
+#endif
 
 namespace binary_log {
 /**

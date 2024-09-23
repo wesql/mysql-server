@@ -1750,9 +1750,26 @@ class Sys_var_plugin : public sys_var {
     plugin_ref plugin;
 
     // special code for storage engines (e.g. to handle historical aliases)
-    if (plugin_type == MYSQL_STORAGE_ENGINE_PLUGIN)
+    if (plugin_type == MYSQL_STORAGE_ENGINE_PLUGIN) {
+#ifdef WITH_SMARTENGINE
+      // In serverless mode, it's not allowed to set default_storage_engine to
+      // other storage engine except smartengine.First, check if the variable
+      // being set is 'default_storage_engine', then verify that the value being
+      // set is not 'smartengine'.
+      if (!opt_initialize && opt_serverless &&
+          (strlen("default_storage_engine") == name.length &&
+           0 == strncasecmp(name.str, "default_storage_engine", name.length))) {
+        if ((strlen(SMARTENGINE_NAME) != pname_cstr.length) ||
+            (0 != strncasecmp(SMARTENGINE_NAME, pname_cstr.str, pname_cstr.length))) {
+          pname_cstr.str = SMARTENGINE_NAME;
+          pname_cstr.length = strlen(SMARTENGINE_NAME);
+          push_warning_printf(thd, Sql_condition::SL_WARNING, ER_FORCE_STORAGE_ENGINE_TO_SMARTENGINE,
+                              "Force change default storage engine from %s to smartengine in serveless mode", res->lex_cstring().str);
+        }
+      }
+#endif // WITH_SMARTENGINE
       plugin = ha_resolve_by_name(thd, &pname_cstr, false);
-    else {
+    } else {
       plugin = my_plugin_lock_by_name(thd, pname_cstr, plugin_type);
     }
 

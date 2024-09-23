@@ -151,6 +151,14 @@ LEX_CSTRING MI_INFO_NAME = {STRING_WITH_LEN("slave_master_info")};
 /* WORKER_INFO name */
 LEX_CSTRING WORKER_INFO_NAME = {STRING_WITH_LEN("slave_worker_info")};
 
+#ifdef WESQL_CLUSTER
+/* CONSENSUS name */
+LEX_CSTRING CONSENSUS_INFO_NAME = { STRING_WITH_LEN("consensus_info") };
+LEX_CSTRING CONSENSUS_APLLIER_INFO_NAME = { STRING_WITH_LEN("consensus_applier_info") };
+LEX_CSTRING CONSENSUS_APLLIER_WORKER_NAME = {
+    STRING_WITH_LEN("consensus_applier_worker")};
+#endif
+
 /* GTID_EXECUTED name */
 LEX_CSTRING GTID_EXECUTED_NAME = {STRING_WITH_LEN("gtid_executed")};
 

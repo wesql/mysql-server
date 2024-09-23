@@ -1996,8 +1996,23 @@ bool PT_create_table_engine_option::contextualize(Table_ddl_parse_context *pc) {
 
   pc->create_info->used_fields |= HA_CREATE_USED_ENGINE;
   const bool is_temp_table = pc->create_info->options & HA_LEX_CREATE_TMP_TABLE;
+#ifdef WITH_SMARTENGINE
+  LEX_CSTRING actual_engine = engine;
+  const bool is_system_thd = pc->thd->is_system_thread();
+  const bool use_smartengine = (engine.length == strlen(SMARTENGINE_NAME)) &&
+      (0 == strncasecmp(engine.str, SMARTENGINE_NAME, engine.length));
+  if (opt_serverless && !is_system_thd && !is_temp_table && !use_smartengine) {
+    actual_engine.str = SMARTENGINE_NAME;
+    actual_engine.length = strlen(SMARTENGINE_NAME);
+    push_warning_printf(pc->thd, Sql_condition::SL_WARNING, ER_FORCE_STORAGE_ENGINE_TO_SMARTENGINE,
+                        "Force change storage engine from %s to smartengine in serveless mode", engine.str);
+  }
+  return resolve_engine(pc->thd, actual_engine, is_temp_table, false,
+                        &pc->create_info->db_type);
+#else
   return resolve_engine(pc->thd, engine, is_temp_table, false,
                         &pc->create_info->db_type);
+#endif // WITH_SMARTENGINE
 }
 
 bool PT_create_table_secondary_engine_option::contextualize(
