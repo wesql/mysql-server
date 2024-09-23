@@ -316,10 +316,6 @@ int ignored_error_code(int err_code);
 */
 #define LOG_EVENT_MTS_ISOLATE_F 0x200
 
-/**
-*/
-#define LOG_EVENT_CONSENSUS_F 0xF000
-
 /** @}*/
 
 /**

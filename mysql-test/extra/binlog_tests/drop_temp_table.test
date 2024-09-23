@@ -37,7 +37,6 @@ DROP TABLE IF EXISTS tmp2, t;
 --enable_warnings
 
 SELECT GET_LOCK("a",10);
---sleep 50
 
 #
 # BUG48216 Replication fails on all slaves after upgrade to 5.0.86 on master
@@ -56,7 +55,7 @@ connection con2;
 # To be sure that logging has been done, we use a user lock.
 SELECT GET_LOCK("a",10);
 let $VERSION=`SELECT VERSION()`;
---sleep 10000
+
 if (`SELECT @@GLOBAL.binlog_format = 'STATEMENT'`)
 {
   let $wait_binlog_event=DROP /*!40005 TEMPORARY */ TABLE IF EXISTS;

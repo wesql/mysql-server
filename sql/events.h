@@ -102,9 +102,6 @@ class Events {
   enum enum_opt_event_scheduler { EVENTS_OFF, EVENTS_ON, EVENTS_DISABLED };
   /* Protected using LOCK_global_system_variables only. */
   static ulong opt_event_scheduler;
-#ifdef WESQL_CLUSTER
-  static ulong opt_configured_event_scheduler;
-#endif
   static bool start(int *err_no);
   static bool stop();
 

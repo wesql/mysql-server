@@ -407,9 +407,6 @@ class Binlog_sender {
   int wait_new_events(my_off_t log_pos);
   int wait_with_heartbeat(my_off_t log_pos);
   int wait_without_heartbeat(my_off_t log_pos);
-#ifdef WESQL_CLUSTER
-  int wait_commit_index_update(my_off_t log_pos, uint64_t index);
-#endif
 
 #ifndef NDEBUG
   /* It is used to count the events that have been sent. */
