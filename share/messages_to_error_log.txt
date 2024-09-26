@@ -12487,11 +12487,32 @@ ER_CONSENSUS_ARCHIVE_RECOVERY_REACHED_STOP_POINT
 ER_CONSENSUS_STATE_LEADER_DEGRADED
   eng "Consensus state leader degradation has %s, term: %llu, commit index: %llu"
 
+ER_CONSENSUS_STATE_CHANGE_IGNORED
+  eng "Consensus state change has ingored, term: %llu, commit index: %llu, reason: %s"
+
 ER_CONSENSUS_STATE_FOLLOWER_UPGRADE
   eng "Consensus state follower upgradation has %s, term: %llu, commit index: %llu"
 
 ER_CONSENSUS_STATE_FOLLOWER_CHANGE_TERM
   eng "Consensus state follower changed term, term: %llu"
+
+ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STARTED
+  eng "Consensus commit advance thread started"
+
+ER_CONSENSUS_COMMIT_POSITION_WAIT
+  eng "Consensus commit advance thread wait for the commit index update, term: %llu, commit index: %llu."
+
+ER_CONSENSUS_COMMIT_POSITION_ADVANCED
+  eng "Consensus commit advance thread updated the commit position, log file: '%s', pos: %llu, term: %llu, commit index: %llu."
+
+ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STOPPED
+  eng "Consensus commit advance thread was terminated because of %s"
+
+ER_CONSENSUS_COMMIT_INDEX_ADVANCED
+  eng "Consensus commit index advanced, commit index: %llu, local system log index: %llu."
+
+ER_CONSENSUS_LOCAL_SYSTEM_LOG_WRITTED
+  eng "Consensus writed local system log, index: %llu, commit index: %llu."
 
 ER_CONSENSUS_APPLIER_THREAD_START
   eng "Consensus applier thread start, recover status: %lld, consensus start apply index: %llu, rli consensus index: %llu."
