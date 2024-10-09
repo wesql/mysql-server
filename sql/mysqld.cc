@@ -1563,6 +1563,7 @@ bool opt_objstore_use_https = false;
 char *opt_objstore_bucket;
 char *opt_objstore_mtr_test_bucket_dir;
 char *opt_cluster_objstore_id = nullptr;
+char *opt_server_id_on_objstore = nullptr;
 
 char *opt_authentication_policy;
 std::vector<std::string> authentication_policy_list;

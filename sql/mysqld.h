@@ -718,6 +718,7 @@ extern MYSQL_PLUGIN_IMPORT char pidfile_name[];
 #define mysql_tmpdir (my_tmpdir(&mysql_tmpdir_list))
 
 extern char *opt_cluster_objstore_id;
+extern char *opt_server_id_on_objstore;
 extern bool consistent_recovery_consensus_recovery;
 extern uint64_t consistent_recovery_snapshot_end_binlog_position;
 extern uint64_t consistent_recovery_snasphot_end_consensus_index;

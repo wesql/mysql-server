@@ -8022,3 +8022,10 @@ static Sys_var_charptr Sys_cluster_objstore_id(
     "includes this id. If serverless is enabled, it must not be empty.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_cluster_objstore_id),
     CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_data"));
+
+static Sys_var_charptr Sys_server_id_on_objstore(
+    "server_id_on_objectstore",
+    "The identifier for the meta directory of the current server on object "
+    "store.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_server_id_on_objstore),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(""));

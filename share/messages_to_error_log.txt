@@ -12550,6 +12550,18 @@ ER_CONSENSUS_CHANGE_META_LOG
 ER_CONSENSUS_CHANGE_META_ERROR
   eng "Failed to change consensus meta, because %s"
 
+ER_CONSENSUS_META_CREATE_OBJECT_STORE_ERROR
+  eng "Failed to create object store for cluster info, provider: %s, region: %s, endpoint:%s, use_https: %s, error: %s."
+
+ER_CONSENSUS_META_PUT_OBJECT_STORE_ERROR
+  eng "Failed to put object store for cluster info, bucket: %s, key: %s, error: %s."
+
+ER_CONSENSUS_META_GET_OBJECT_STORE_ERROR
+  eng "Failed to get object store for cluster info, bucket: %s, key: %s, error: %s."
+
+ER_CONSENSUS_META_MALFORMED_CLUSTER_INFO_ERROR
+  eng "Found malformed cluster info on objectsotre, bucket: %s, key: %s, error: %s."
+
 ER_CONSENSUS_CREATE_THRERD_ERROR
   eng "Failed to create thread: %s."
 
@@ -12595,7 +12607,7 @@ ER_CONSENSUS_LOG_APPEND_TERM_MISMATCH
 ER_CONSENSUS_LOG_APPEND_INDEX_MISMATCH
   eng "Failed to append a consensus entry because of index mismatch, current index: %llu, entry index: %llu."
 
-ER_COSENNSUS_FAILPOINT_ACTIVE
+ER_CONSENSUS_FAILPOINT_ACTIVE
   eng "Consensus libary failpoint '%s' is going to activate, type: %d, exec_count: %d, input_type: %d, probability: %1.2f"
 
 ER_COSENNSUS_FAILPOINT_DEACTIVE
