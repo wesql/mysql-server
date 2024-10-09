@@ -1033,7 +1033,8 @@ SET(BINLOG_SOURCE
   changestreams/misc/column_filters/column_filter_outbound_func_indexes.cc
   consistent_archive.cc
   consistent_recovery.cc
-  consistent_snapshot_command.cc
+  consistent_snapshot_purge_command.cc
+  consistent_snapshot_force_command.cc
   log_event.cc
   rpl_commit_stage_manager.cc
   rpl_filter.cc

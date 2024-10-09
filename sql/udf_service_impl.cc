@@ -30,7 +30,8 @@
 #include "sql/udf_service_impl.h"
 
 #include "sql/binlog_archive_command.h"
-#include "sql/consistent_snapshot_command.h"
+#include "sql/consistent_snapshot_force_command.h"
+#include "sql/consistent_snapshot_purge_command.h"
 #include "sql/rpl_async_conn_failover_add_managed_udf.h"
 #include "sql/rpl_async_conn_failover_add_source_udf.h"
 #include "sql/rpl_async_conn_failover_delete_managed_udf.h"
@@ -129,7 +130,8 @@ void Udf_load_service::register_udf() {
   add<Rpl_async_conn_failover_delete_managed>();
   add<Rpl_async_conn_failover_reset>();
   add<Binlog_archive_command>();
-  add<Consistent_archive_command>();
+  add<Consistent_archive_force_command>();
+  add<Consistent_archive_purge_command>();
 }
 
 void Udf_load_service::unregister_udf() {
