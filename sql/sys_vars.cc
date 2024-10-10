@@ -7821,9 +7821,9 @@ static Sys_var_ulong Sys_binlog_archive_slice_max_size(
 
 static Sys_var_ulong Sys_binlog_archive_period(
     "binlog_archive_period",
-    "binlog persist to object store at the given period",
+    "binlog persist to object store at the given period milliseconds",
     GLOBAL_VAR(opt_binlog_archive_period), CMD_LINE(REQUIRED_ARG),
-    VALID_RANGE(1, LONG_TIMEOUT), DEFAULT(3), BLOCK_SIZE(1));
+    VALID_RANGE(10, ULONG_MAX), DEFAULT(1000), BLOCK_SIZE(1));
 
 static Sys_var_bool Sys_consistent_snapshot_persistent_on_objectstore(
     "consistent_snapshot_persistent_on_objectstore",
@@ -7835,9 +7835,9 @@ static Sys_var_bool Sys_consistent_snapshot_persistent_on_objectstore(
 static Sys_var_ulong Sys_consistent_snapshot_archive_period(
     "consistent_snapshot_archive_period",
     "A consistent snapshot is created to archive at the "
-    "given interval",
+    "given period",
     GLOBAL_VAR(opt_consistent_snapshot_archive_period), CMD_LINE(REQUIRED_ARG),
-    VALID_RANGE(2, LONG_TIMEOUT), DEFAULT(600), BLOCK_SIZE(1));
+    VALID_RANGE(2, LONG_TIMEOUT), DEFAULT(300), BLOCK_SIZE(1));
 
 static Sys_var_bool Sys_consistent_snapshot_expire_auto_purge(
     "consistent_snapshot_expire_auto_purge",

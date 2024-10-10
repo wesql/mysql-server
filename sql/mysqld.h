@@ -731,7 +731,7 @@ extern char *opt_binlog_archive_dir;
 extern bool opt_binlog_archive_using_consensus_index;
 extern bool opt_binlog_archive_expire_auto_purge;
 extern ulong opt_binlog_archive_expire_seconds;
-extern ulong opt_binlog_archive_period;
+extern ulonglong opt_binlog_archive_period;
 extern char *opt_consistent_snapshot_archive_dir;
 extern bool opt_consistent_snapshot_persistent_on_objstore;
 extern bool opt_initialize_use_objstore;
