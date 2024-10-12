@@ -8031,9 +8031,11 @@ int mysqld_main(int argc, char **argv)
     }
 
     std::string err_msg;
+    std::string_view endpoint(
+        opt_objstore_endpoint ? std::string_view(opt_objstore_endpoint) : "");
     if (objstore::ensure_object_store_lock(
             std::string_view(opt_objstore_provider),
-            std::string_view(opt_objstore_region),
+            std::string_view(opt_objstore_region), &endpoint,
             std::string_view(opt_objstore_bucket),
             std::string_view(opt_cluster_objstore_id),
             !opt_initialize || !opt_table_on_objstore, err_msg)) {
