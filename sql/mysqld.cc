@@ -8132,7 +8132,9 @@ int mysqld_main(int argc, char **argv)
     if (RUN_HOOK(binlog_manager, gtid_recovery, (&mysql_bin_log))) {
       unireg_abort(MYSQLD_ABORT_EXIT);
     }
-    (void)RUN_HOOK(server_state, after_engine_recovery, (nullptr));
+    if (RUN_HOOK(server_state, after_engine_recovery, (nullptr))) {
+      unireg_abort(MYSQLD_ABORT_EXIT);
+    }
   } else
 #endif
   if (opt_bin_log) {
@@ -8397,7 +8399,12 @@ int mysqld_main(int argc, char **argv)
 
   initialize_information_schema_acl();
 
+#ifdef WESQL_CLUSTER
+  if (RUN_HOOK(server_state, after_recovery, (nullptr)))
+    unireg_abort(MYSQLD_ABORT_EXIT);
+#else
   (void)RUN_HOOK(server_state, after_recovery, (nullptr));
+#endif
 
   // Start binlog and consistent snapshot thread, after consensus service.
   // The consensus service is started within the `after_recovery` hook.
