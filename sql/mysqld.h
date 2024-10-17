@@ -717,7 +717,8 @@ extern MYSQL_PLUGIN_IMPORT char pidfile_name[];
 
 #define mysql_tmpdir (my_tmpdir(&mysql_tmpdir_list))
 
-extern char *opt_cluster_objstore_id;
+extern char *opt_repo_objstore_id;
+extern char *opt_branch_objstore_id;
 extern char *opt_server_id_on_objstore;
 extern bool consistent_recovery_consensus_recovery;
 extern uint64_t consistent_recovery_snapshot_end_binlog_position;
@@ -752,7 +753,9 @@ extern char *opt_initialize_objstore_region;
 extern char *opt_initialize_objstore_endpoint;
 extern bool opt_initialize_objstore_use_https;
 extern char *opt_initialize_objstore_bucket;
-extern char *opt_initialize_cluster_objstore_id;
+extern char *opt_initialize_repo_objstore_id;
+extern char *opt_initialize_branch_objstore_id;
+extern bool opt_initialize_smartengine_objectstore_data;
 
 extern MYSQL_PLUGIN_IMPORT bool opt_serverless;
 extern MYSQL_PLUGIN_IMPORT bool opt_table_on_objstore;

@@ -1548,7 +1548,9 @@ char *opt_initialize_objstore_region = nullptr;
 char *opt_initialize_objstore_endpoint = nullptr;
 bool opt_initialize_objstore_use_https = false;
 char *opt_initialize_objstore_bucket = nullptr;
-char *opt_initialize_cluster_objstore_id = nullptr;
+char *opt_initialize_repo_objstore_id = nullptr;
+char *opt_initialize_branch_objstore_id = nullptr;
+bool opt_initialize_smartengine_objectstore_data = false;
 bool opt_serverless = true;
 /**
   TODO(cnut): how to validate the relationship between different variables of
@@ -1562,7 +1564,8 @@ char *opt_objstore_endpoint;
 bool opt_objstore_use_https = false;
 char *opt_objstore_bucket;
 char *opt_objstore_mtr_test_bucket_dir;
-char *opt_cluster_objstore_id = nullptr;
+char *opt_repo_objstore_id = nullptr;
+char *opt_branch_objstore_id = nullptr;
 char *opt_server_id_on_objstore = nullptr;
 
 char *opt_authentication_policy;
@@ -8024,8 +8027,8 @@ int mysqld_main(int argc, char **argv)
 
   // Check the validity of the UUID using the specified objstore_uuid
   if (!is_help_or_validate_option() && opt_serverless &&
-      opt_cluster_objstore_id != nullptr) {
-    if (*opt_cluster_objstore_id == '\0') {
+      opt_repo_objstore_id != nullptr) {
+    if (*opt_repo_objstore_id == '\0') {
       LogErr(ERROR_LEVEL, ER_OBJSTORE_ID_CHECK_ERROR, "invalid empty objectstore id");
       unireg_abort(MYSQLD_ABORT_EXIT); /* purecov: inspected */
     }
@@ -8037,7 +8040,8 @@ int mysqld_main(int argc, char **argv)
             std::string_view(opt_objstore_provider),
             std::string_view(opt_objstore_region), &endpoint,
             std::string_view(opt_objstore_bucket),
-            std::string_view(opt_cluster_objstore_id),
+            std::string_view(opt_repo_objstore_id),
+            std::string_view(opt_branch_objstore_id),
             !opt_initialize || !opt_table_on_objstore, err_msg)) {
       LogErr(ERROR_LEVEL, ER_OBJSTORE_ID_CHECK_ERROR, err_msg.c_str());
       unireg_abort(MYSQLD_ABORT_EXIT); /* purecov: inspected */

@@ -12653,7 +12653,7 @@ ER_CONSENSUS_FIFO_CACHE_SET_BLOB_INDEX
   eng "Consensus log FIFO cache set lock_blob_index to %llu"
 
 ER_OBJSTORE_ID_CHECK_ERROR
-  eng "Failed to verify the ID of data directory in the object store with the specified cluster_objectstore_id: %s"
+  eng "Failed to verify the ID of data directory in the object store with the specified repo_objectstore_id: %s"
 
 ER_BINLOG_ARCHIVE_LOG
   eng "Binlog archive: %s."

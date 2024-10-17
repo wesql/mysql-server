@@ -7951,18 +7951,31 @@ static Sys_var_bool Sys_initialize_objstore_use_https(
 static Sys_var_charptr Sys_initialize_objstore_bucket(
     "initialize_objectstore_bucket",
     "The object store bucket to store record as the source of data during "
-    "instance initialization. "
-    "If initialize_from_objectstore is true, it must not be "
-    "empty.",
+    "instance initialization. If initialize_from_objectstore is true, it must "
+    "not be empty.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_bucket),
     CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("objbucket"));
 
-static Sys_var_charptr Sys_initialize_cluster_objstore_id(
-    "initialize_cluster_objectstore_id",
-    "The identifier for data directory of source cluster in object store. "
+static Sys_var_charptr Sys_initialize_repo_objstore_id(
+    "initialize_repo_objectstore_id",
+    "The repo identifier for data directory of source cluster in object store. "
     "If initialize_from_objectstore is true, it must not be empty.",
-    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_cluster_objstore_id),
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_repo_objstore_id),
     CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_data"));
+
+static Sys_var_charptr Sys_initialize_branch_objstore_id(
+    "initialize_branch_objectstore_id",
+    "The branch identifier for data directory of source cluster in object store.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_branch_objstore_id),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("main"));
+
+static Sys_var_bool Sys_initialize_smartengine_objectstore_data(
+    "initialize_smartengine_objectstore_data",
+    "If initialize_from_objectstore is true, whether initialize smartengine "
+    "object store data from source cluster object store.",
+    READ_ONLY NON_PERSIST
+        GLOBAL_VAR(opt_initialize_smartengine_objectstore_data),
+    CMD_LINE(OPT_ARG), DEFAULT(false));
 
 static Sys_var_bool Sys_enable_serverless(
     "serverless", "Enable the serverless",
@@ -8015,13 +8028,22 @@ static Sys_var_charptr Sys_objstore_mtr_test_bucket_dir(
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_mtr_test_bucket_dir),
     CMD_LINE(OPT_ARG), IN_FS_CHARSET, DEFAULT(""));
 
-static Sys_var_charptr Sys_cluster_objstore_id(
-    "cluster_objectstore_id",
-    "The identifier for data directory in object store. To ensure data "
-    "consistency by accessing the object using the key with the prefix that "
-    "includes this id. If serverless is enabled, it must not be empty.",
-    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_cluster_objstore_id),
-    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_data"));
+static Sys_var_charptr Sys_repo_objstore_id(
+    "repo_objectstore_id",
+    "The repository identifier for cluster data directory in object store. To "
+    "ensure data consistency by accessing the object using the key with the "
+    "prefix that includes this id. If serverless is enabled, it must not be "
+    "empty.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_repo_objstore_id),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql-storage"));
+
+static Sys_var_charptr Sys_cluster_branch_objstore_id(
+    "branch_objectstore_id",
+    "The branch identifier for cluster data directory in object store. To "
+    "ensure data consistency by accessing the object using the key with the "
+    "prefix that includes this id.",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_branch_objstore_id),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("main"));
 
 static Sys_var_charptr Sys_server_id_on_objstore(
     "server_id_on_objectstore",
