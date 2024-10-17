@@ -12458,7 +12458,7 @@ ER_CONSENSUS_GET_LOG_ENTRY_UNFLUSHED_ERROR
   eng "Failed to get log entry, because the entry has not been flushed to disk. index: %llu, sync index: %llu"
 
 ER_CONSENSUS_LOG_ENTRY_NOT_FOUND_FROM_CACHE
-  eng "Unable to get the consensus log entry in the cache, starting prefetch. channel id: %llu, index: %llu"
+  eng "Unable to get the log entry in the cache. channel id: %llu, index: %llu, error: %d"
 
 ER_CONSENSUS_LOG_RESET_PREVIOUS_GITD_SET_ERROR
   eng "Failed to reset the previous_gtid_set of the consensus log"
@@ -12615,6 +12615,9 @@ ER_COSENNSUS_FAILPOINT_DEACTIVE
 
 ER_CONSENSUS_LOG_RUN_PREFETCH
   eng "Consensus log prefetch thread try to fetch, channel: %llu, index: %llu"
+
+ER_CONSENSUS_LOG_PREFETCH_ONE_ENTRY
+  eng "Consensus log prefetch thread fetch a valid log entry, channel: %llu, request index: %llu"
 
 ER_CONSENSUS_LOG_FINISH_PREFETCH
   eng "Consensus log prefetch for channel %llu has reached the consensus index %llu"
