@@ -1207,6 +1207,7 @@ bool update_log_file_set_flag_in_use(const char *log_name, bool in_use);
 #ifdef WESQL_CLUSTER
 void binlog_update_end_pos(MYSQL_BIN_LOG *binlog, const char *file,
                            my_off_t pos);
+bool binlog_write_event_directly(MYSQL_BIN_LOG *binlog, Log_event *ev);
 int truncate_binlog_file_to_valid_pos(const char *log_name, my_off_t valid_pos,
                                       my_off_t binlog_size, bool update);
 int binlog_file_flush_and_sync(MYSQL_BIN_LOG::Binlog_ofile *binlog_file);
