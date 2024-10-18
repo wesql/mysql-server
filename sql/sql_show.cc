@@ -5040,13 +5040,17 @@ static int fill_binlog_persistent_index_file(THD *thd, Table_ref *tables, Item *
     size_t idx = in_str.find("|");
 
     std::string found_log_slice_name = in_str.substr(0, idx);
-    std::string found_consensus_index = in_str.substr(idx + 1);
-    uint64_t previous_consensus_index = std::stoull(found_consensus_index);
+    std::string left_string = in_str.substr(idx + 1);
+    idx = left_string.find("|");
+    std::string found_end_consensus_index = left_string.substr(0, idx);
+    uint64_t slice_end_consensus_index = std::stoull(found_end_consensus_index);
+    std::string found_previous_consensus_index = left_string.substr(idx + 1);
+    uint64_t log_previous_consensus_index = std::stoull(found_previous_consensus_index);
 
     size_t first_dot = found_log_slice_name.find('.');
     size_t second_dot = found_log_slice_name.find('.', first_dot + 1);
     std::string log_name = found_log_slice_name.substr(0, second_dot);
-    std::string left_string = found_log_slice_name.substr(second_dot + 1);
+    left_string = found_log_slice_name.substr(second_dot + 1);
     size_t third_dot = left_string.find('.');
     std::string term = left_string.substr(0, third_dot);
     std::string end_pos = left_string.substr(third_dot + 1);
@@ -5057,7 +5061,8 @@ static int fill_binlog_persistent_index_file(THD *thd, Table_ref *tables, Item *
     table->field[1]->store(log_name.c_str(), log_name.length(), cs);
     table->field[2]->store(slice_consensus_term, true);
     table->field[3]->store(slice_end_pos, true);
-    table->field[4]->store(previous_consensus_index, true);
+    table->field[4]->store(slice_end_consensus_index, true);
+    table->field[5]->store(log_previous_consensus_index, true);
     if (schema_table_store_record(thd, table)) goto err;
   }
   if (index_file->error == -1) {
@@ -5584,7 +5589,8 @@ ST_FIELD_INFO binlog_persistent_index_slice_fields_info[] = {
     {"LOG_NAME", FN_REFLEN, MYSQL_TYPE_STRING, 0, 0, "Null", 0},
     {"RAFT_TERM", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
     {"SLICE_END_POS", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
-    {"PREVIOUS_RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"SLICE_END_RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
+    {"LOG_PREVIOUS_RAFT_INDEX", 21, MYSQL_TYPE_LONGLONG, 0, 0, "Null", 0},
     {nullptr, 0, MYSQL_TYPE_STRING, 0, 0, nullptr, 0}};
 
 ST_FIELD_INFO binlog_persistent_slice_fields_info[] = {
