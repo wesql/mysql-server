@@ -7995,8 +7995,9 @@ static Sys_var_charptr Sys_objstore_region(
     "objectstore_region",
     "The region of object store. "
     "If serverless is enabled, objectstore_region must not be empty.",
-    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_region), CMD_LINE(REQUIRED_ARG),
-    IN_FS_CHARSET, DEFAULT("local_objectstore_region"));
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_objstore_region),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET,
+    DEFAULT(".local_objectstore_region"));
 
 static Sys_var_charptr Sys_objstore_endpoint(
     "objectstore_endpoint",
