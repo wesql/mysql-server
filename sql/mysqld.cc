@@ -6624,7 +6624,8 @@ static int init_server_components() {
       opt_initialize_from_objstore) {
     if (consistent_recovery.recovery_consistent_snapshot(
             CONSISTENT_RECOVERY_INNODB | CONSISTENT_RECOVERY_SMARTENGINE |
-            CONSISTENT_RECOVERY_BINLOG)) {
+            CONSISTENT_RECOVERY_BINLOG |
+            CONSISTENT_RECOVERY_SMARTENGINE_EXTENT)) {
       LogErr(ERROR_LEVEL, ER_CONSISTENT_SNAPSHOT_LOG,
              "Failed to recovery innodb and smartengine data files from object "
              "store");
