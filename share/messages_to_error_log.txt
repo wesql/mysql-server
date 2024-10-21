@@ -12695,31 +12695,31 @@ ER_BINLOG_ARCHIVE_PURGE_LOG
   eng "Binlog archive: purge persistent binlog %s"
 
 ER_CONSISTENT_SNAPSHOT_LOG
-   eng "Consistent snapshot: %s"
+   eng "Snapshot archive: %s"
 
 ER_CONSISTENT_SNAPSHOT_ARCHIVE_THREAD_LOG
-   eng "Consistent snapshot archive thread: %s"
+   eng "Snapshot archive thread: %s"
 
 ER_CONSISTENT_SNAPSHOT_ARCHIVE_INNODB_LOG
-   eng "Consistent snapshot archive innodb: %s"
+   eng "Snapshot archive innodb: %s"
 
 ER_CONSISTENT_SNAPSHOT_ARCHIVE_SMARTENGINE_LOG
-   eng "Consistent snapshot archive smartengine: %s"
+   eng "Snapshot archive smartengine: %s"
 
 ER_CONSISTENT_SNAPSHOT_ARCHIVE_BINLOG_LOG
-   eng "Consistent snapshot archive binlog: %s"
+   eng "Snapshot archive binlog: %s"
 
 ER_CONSISTENT_SNAPSHOT_PURGE_LOG
-   eng "Consistent snapshot purge: %s"
+   eng "Snapshot archive purge: %s"
 
 ER_CONSISTENT_SNAPSHOT_ARCHIVE_INDEX_LOG
-   eng "Consistent snapshot archive index: %s"
+   eng "Snapshot archive index: %s"
 
 ER_CONSISTENT_RECOVERY_LOG
-  eng "Consistent recovery: %s"
+  eng "Snapshot recovery: %s"
 
 ER_CONSISTENT_RECOVERY_GET_LAST_BINLOG_CONSENSUS_INDEX_LOG
-  eng "Consistent recovery get last persistent binlog consensus index: %s."
+  eng "Snapshot recovery get last persistent binlog consensus index: %s."
 
 ER_FORCE_DEFAULT_STORAGE_ENGINE_TO_SMARTENGINE
   eng "Force to use smartengine as default storage engine in serverless mode, not %s."

@@ -7765,18 +7765,6 @@ static Sys_var_enum Sys_explain_format(
     DEFAULT(static_cast<ulong>(Explain_format_type::TRADITIONAL)),
     NO_MUTEX_GUARD, NOT_IN_BINLOG, ON_CHECK(nullptr), ON_UPDATE(nullptr));
 
-static Sys_var_bool Sys_consistent_snapshot_archive(
-    "consistent_snapshot_archive",
-    "Indicate if consistent snapshot archive enable.",
-    NON_PERSIST GLOBAL_VAR(opt_consistent_snapshot_archive),
-    CMD_LINE(OPT_ARG), DEFAULT(true));
-
-static Sys_var_charptr Sys_consistent_snapshot_archive_dir(
-    "consistent_snapshot_archive_dir",
-    "The location path for consistent snapshot archive",
-    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_consistent_snapshot_archive_dir),
-    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(nullptr));
-
 static Sys_var_bool Sys_binlog_archive(
     "binlog_archive", "Indicate if binlog archive enable.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_binlog_archive), CMD_LINE(OPT_ARG),
@@ -7825,82 +7813,91 @@ static Sys_var_ulong Sys_binlog_archive_period(
     GLOBAL_VAR(opt_binlog_archive_period), CMD_LINE(REQUIRED_ARG),
     VALID_RANGE(10, ULONG_MAX), DEFAULT(1000), BLOCK_SIZE(1));
 
-static Sys_var_bool Sys_consistent_snapshot_persistent_on_objectstore(
-    "consistent_snapshot_persistent_on_objectstore",
-    "Use object store to persist binlog and consistent snapshot.",
+static Sys_var_bool Sys_snapshot_archive(
+    "snapshot_archive",
+    "Indicate if snapshot archive enable.",
+    NON_PERSIST GLOBAL_VAR(opt_consistent_snapshot_archive),
+    CMD_LINE(OPT_ARG), DEFAULT(true));
+
+static Sys_var_charptr Sys_snapshot_archive_dir(
+    "snapshot_archive_dir",
+    "The location path for snapshot archive",
+    READ_ONLY NON_PERSIST GLOBAL_VAR(opt_consistent_snapshot_archive_dir),
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(nullptr));
+
+static Sys_var_bool Sys_snapshot_archive_on_objectstore(
+    "snapshot_archive_on_objectstore",
+    "Use object store to persist snapshot.",
     READ_ONLY NON_PERSIST
         GLOBAL_VAR(opt_consistent_snapshot_persistent_on_objstore),
     CMD_LINE(OPT_ARG), DEFAULT(true));
 
-static Sys_var_ulong Sys_consistent_snapshot_archive_period(
-    "consistent_snapshot_archive_period",
-    "A consistent snapshot is created to archive at the "
-    "given period",
+static Sys_var_ulong Sys_snapshot_archive_period(
+    "snapshot_archive_period",
+    "A snapshot is created to archive at the given period",
     GLOBAL_VAR(opt_consistent_snapshot_archive_period), CMD_LINE(REQUIRED_ARG),
     VALID_RANGE(2, LONG_TIMEOUT), DEFAULT(300), BLOCK_SIZE(1));
 
-static Sys_var_bool Sys_consistent_snapshot_expire_auto_purge(
-    "consistent_snapshot_expire_auto_purge",
-    "Controls whether the server shall automatically purge consistent snapshot "
+static Sys_var_bool Sys_snapshot_archive_expire_auto_purge(
+    "snapshot_archive_expire_auto_purge",
+    "Controls whether the server shall automatically purge snapshot "
     "or not. If this variable is set to FALSE then the server will "
-    "not purge persistent consistent snapshot automatically.",
+    "not purge persistent snapshot automatically.",
     GLOBAL_VAR(opt_consistent_snapshot_expire_auto_purge), CMD_LINE(OPT_ARG),
     DEFAULT(true));
 
-static Sys_var_ulong Sys_consistent_snapshot_expire_seconds(
-    "consistent_snapshot_expire_seconds",
-    "If non-zero, consistent snapshot will be purged after "
-    "consistent_snapshot_expire_seconds"
-    " seconds. If zero, only the latest consistent snapshot will be retained.",
+static Sys_var_ulong Sys_snapshot_archive_expire_seconds(
+    "snapshot_archive_expire_seconds",
+    "If non-zero, snapshot will be purged after "
+    "snapshot_archive_expire_seconds"
+    " seconds. If zero, only the latest snapshot will be retained.",
     GLOBAL_VAR(opt_consistent_snapshot_expire_seconds), CMD_LINE(REQUIRED_ARG),
     VALID_RANGE(0, 0xFFFFFFFF), DEFAULT(0), BLOCK_SIZE(1));
 
 static const char *consistent_snapshot_tar_names[] = {"OFF", "TAR",
                                                   "TAR_AND_COMPRESS", NullS};
-static Sys_var_enum Sys_consistent_snapshot_innodb_tar_mode(
-    "consistent_snapshot_innodb_tar_mode",
-    "Indicates if innodb clone data of consistent snapshots is in tar or "
+static Sys_var_enum Sys_snapshot_archive_innodb_tar_mode(
+    "snapshot_archive_innodb_tar_mode",
+    "Indicates if innodb clone data of snapshots is in tar or "
     "compressed mode.",
     GLOBAL_VAR(opt_consistent_snapshot_innodb_tar_mode), CMD_LINE(REQUIRED_ARG),
     consistent_snapshot_tar_names, DEFAULT(CONSISTENT_SNAPSHOT_NO_TAR));
 
-static Sys_var_enum Sys_consistent_snapshot_smartengine_tar_mode(
-    "consistent_snapshot_smartengine_tar_mode",
-    "Indicates if smartengine backup data of consistent snapshots is in tar or "
+static Sys_var_enum Sys_snapshot_archive_smartengine_tar_mode(
+    "snapshot_archive_smartengine_tar_mode",
+    "Indicates if smartengine backup data of snapshots is in tar or "
     "compressed mode.",
     GLOBAL_VAR(opt_consistent_snapshot_se_tar_mode), CMD_LINE(OPT_ARG),
     consistent_snapshot_tar_names, DEFAULT(CONSISTENT_SNAPSHOT_NO_TAR));
 
-static Sys_var_bool Sys_consistent_snapshot_smartengine_backup_checkpoint(
-    "consistent_snapshot_smartengine_backup_checkpoint",
-    "Indicate  indicates whether to do a checkpoint before executing a "
+static Sys_var_bool Sys_snapshot_archive_smartengine_backup_checkpoint(
+    "snapshot_archive_smartengine_backup_checkpoint",
+    "Indicate if to do a checkpoint before executing a "
     "smartengine backup.",
     GLOBAL_VAR(opt_consistent_snapshot_smartengine_backup_checkpoint),
     CMD_LINE(OPT_ARG), DEFAULT(false));
 
-static Sys_var_bool Sys_recovery_from_objstore(
-    "recovery_from_objectstore",
-    "Recovery binlog and consistent snapshot from object store.",
+static Sys_var_bool Sys_recovery_snapshot_from_objstore(
+    "recovery_snapshot_from_objectstore",
+    "Recovery binlog and snapshot from object store.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_recovery_from_objstore),
     CMD_LINE(OPT_ARG), DEFAULT(true));
 
-static Sys_var_charptr Sys_recovery_consistent_snapshot_tmpdir(
-    "recovery_consistent_snapshot_tmpdir",
-    "The location temp path for consistent snapshot recovery from object "
-    "store.",
+static Sys_var_charptr Sys_recovery_snapshot_tmpdir(
+    "recovery_snapshot_tmpdir",
+    "The location temp path for snapshot recovery from object store.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_recovery_consistent_snapshot_tmpdir),
     CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("recovery_tmp"));
 
-static Sys_var_bool Sys_recovery_consistent_snapshot_only(
-    "recovery_consistent_snapshot_only",
-    "Indicate whether to recover only consistent snapshot without binlog "
-    "archive recovery.",
+static Sys_var_bool Sys_recovery_snapshot_only(
+    "recovery_snapshot_only",
+    "Indicate whether to recover only snapshot without binlog archive recovery.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_recovery_consistent_snapshot_only),
     CMD_LINE(OPT_ARG), DEFAULT(false));
 
-static Sys_var_charptr Sys_recovery_consistent_snapshot_timestamp(
-    "recovery_consistent_snapshot_timestamp",
-    "Consistent snapshot timestamp from object store used as the source of "
+static Sys_var_charptr Sys_recovery_snapshot_timestamp(
+    "recovery_snapshot_timestamp",
+    "Snapshot timestamp from object store used as the source of "
     "recovery during instance.",
     READ_ONLY NON_PERSIST
         GLOBAL_VAR(opt_recovery_consistent_snapshot_timestamp),
@@ -7908,7 +7905,7 @@ static Sys_var_charptr Sys_recovery_consistent_snapshot_timestamp(
 
 static Sys_var_bool Sys_initialize_from_objstore(
     "initialize_from_objectstore",
-    "Initialzie instance using binlog and consistent snapshot from object "
+    "Initialzie instance using binlog and snapshot from object "
     "store.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_from_objstore),
     CMD_LINE(OPT_ARG), DEFAULT(false));
@@ -7928,7 +7925,7 @@ static Sys_var_charptr Sys_initialize_objstore_region(
     "If initialize_from_objectstore is true, it must not be "
     "empty.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_region),
-    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("local_objstore_region"));
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT(".local_objectstore_region_1"));
 
 static Sys_var_charptr Sys_initialize_objstore_endpoint(
     "initialize_objectstore_endpoint",
@@ -7954,14 +7951,14 @@ static Sys_var_charptr Sys_initialize_objstore_bucket(
     "instance initialization. If initialize_from_objectstore is true, it must "
     "not be empty.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_objstore_bucket),
-    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("objbucket"));
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("objectstore_bucket_1"));
 
 static Sys_var_charptr Sys_initialize_repo_objstore_id(
     "initialize_repo_objectstore_id",
     "The repo identifier for data directory of source cluster in object store. "
     "If initialize_from_objectstore is true, it must not be empty.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_initialize_repo_objstore_id),
-    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_data"));
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_repo"));
 
 static Sys_var_charptr Sys_initialize_branch_objstore_id(
     "initialize_branch_objectstore_id",
@@ -8035,7 +8032,7 @@ static Sys_var_charptr Sys_repo_objstore_id(
     "prefix that includes this id. If serverless is enabled, it must not be "
     "empty.",
     READ_ONLY NON_PERSIST GLOBAL_VAR(opt_repo_objstore_id),
-    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql-storage"));
+    CMD_LINE(REQUIRED_ARG), IN_FS_CHARSET, DEFAULT("wesql_serverless_repo"));
 
 static Sys_var_charptr Sys_cluster_branch_objstore_id(
     "branch_objectstore_id",
