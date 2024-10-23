@@ -12310,8 +12310,14 @@ ER_CONSENSUS_REPLICATION_PLUGIN_NOT_INSTALLED
 ER_CONSENSUS_CMD_LOG
   eng "user:%s  host:%s sql:%s result:%d!!!"
 
+ER_CONSENSUS_BINLOG_RECOVERING_POINT
+  eng "Consensus binlog crash recovering using %s to index %llu %s"
+
+ER_CONSENSUS_BINLOG_RECOVERING_AFTER_CRASH_USING
+  eng "Consensus binlog crash recovering using %s, ha_recover: %d"
+
 ER_CONSENSUS_BINLOG_RECOVERING_USING
-  eng "Consensus binlog recovering after a crash using %s to index %llu"
+  eng "Consensus binlog recovering using %s"
 
 ER_CONSENSUS_RPL_FAILED_TO_REGISTER_SERVER_STATE_OBSERVER
   eng "Failure when registering the server state observers"
@@ -12362,7 +12368,7 @@ ER_CONSENSUS_RPL_APPLIER_METADATA_REPO_MUST_BE_TABLE
   eng "Consensus applier metadata repository must be set to TABLE."
 
 ER_CONSENSUS_RECOVERY_TRX_LOGS
-  eng "Consensus recovery %s, transaction id: %d, consensus index: %llu, state: %d",
+  eng "Consensus recovery %s, transaction id: %lu, consensus index: %llu, state: %d",
 
 ER_CONSENSUS_RECOVERY_EXTERN_TRX_LOGS
   eng "Consensus recovery %s, transaction id: '%s', consensus index: %llu, state: %d",
@@ -12571,9 +12577,6 @@ ER_CONSENSUS_SERVER_NOT_READY
 ER_CONSENSUS_LOG_FLUSH_CACHE_ERROR
   eng "Failed to flush binlog cache to the consensus log, because %s."
 
-ER_CONSENSUS_LOG_FLUSH_CACHE_LOG
-  eng "Flush binlog cache to the consensus log, current pos: %llu, payload size: %lu, index: %llu."
-
 ER_CONSENSUS_LOG_WRITE_CONSENSUS_EVENT_FAILED
   eng "Failed to write a consensus log event"
 
@@ -12591,9 +12594,6 @@ ER_CONSENSUS_LOG_WRITE_LARGE_TRX_ENTRY
 
 ER_CONSENSUS_LOG_WRITE_LARGE_TRX_END_ENTRY
   eng "Write the end entry for large transaction, current pos: %llu, batch_size %llu, index: %llu.",
-
-ER_CONSENSUS_LOG_APPEND_ONE_ENTRY_LOG
-  eng "Append one log entry to consensus log, current pos: %llu, payload start pos: %llu, index: %llu, flag: %#X"
 
 ER_CONSENSUS_LOG_APPEND_LARGE_EVENT_END_ENTRY
   eng "Append the whole event to consensus log for the large event, size: %llu"
