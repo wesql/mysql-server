@@ -7920,11 +7920,7 @@ void MYSQL_BIN_LOG::close(
     }
 
     /* The following update should not be done in relay log files */
-    if (!is_relay_log
-#ifdef WESQL_CLUSTER
-        && !is_consensus_write
-#endif
-    ) {
+    if (!is_relay_log) {
       my_off_t offset = BIN_LOG_HEADER_SIZE + FLAGS_OFFSET;
       uchar flags = 0;  // clearing LOG_EVENT_BINLOG_IN_USE_F
       (void)m_binlog_file->update(&flags, 1, offset);

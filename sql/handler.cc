@@ -1321,8 +1321,22 @@ void trans_register_ha(THD *thd, bool all, handlerton *ht_arg,
     return; /* already registered, return */
   }
 
+#ifdef WESQL_CLUSTER
+  if (thd->slave_thread &&
+      thd->consensus_context.consensus_replication_applier) {
+    ha_info->set_add_tail(ht_arg->db_type != DB_TYPE_INNODB &&
+                          ht_arg->db_type != DB_TYPE_BINLOG);
+  }
+#endif
   trn_ctx->register_ha(trx_scope, ha_info, ht_arg);
+#ifdef WESQL_CLUSTER
+  if (!thd->slave_thread ||
+      !thd->consensus_context.consensus_replication_applier) {
+    trn_ctx->set_ha_trx_info(trx_scope, ha_info);
+  }
+#else
   trn_ctx->set_ha_trx_info(trx_scope, ha_info);
+#endif
 
   if (ht_arg->prepare == nullptr) trn_ctx->set_no_2pc(trx_scope, true);
 

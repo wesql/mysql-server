@@ -79,6 +79,9 @@ bool recover_prepared_in_tc_one_ht(THD *thd, plugin_ref plugin, void *arg);
   @return false if the recovery ended successfully, false otherwise.
  */
 bool recover_one_ht(THD *thd, plugin_ref plugin, void *arg);
+#ifdef WESQL_CLUSTER
+bool inverse_recover_one_ht(THD *thd, plugin_ref plugin, void *arg);
+#endif
 }  // namespace recovery
 }  // namespace xa
 #endif  // XA_RECOVERY_H_INCLUDED

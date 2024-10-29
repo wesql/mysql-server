@@ -415,8 +415,21 @@ class Ha_trx_info {
     m_flags = (int)TRX_READ_ONLY; /* Assume read-only at start. */
 
     if (trans->m_ha_list != this) {
+#ifdef WESQL_CLUSTER
+      if (trans->m_ha_list != nullptr && m_add_tail) {
+        /* Add to the tail of the list */
+        auto end = trans->m_ha_list;
+        while (end->m_next != nullptr) end = end->m_next;
+        end->m_next = this;
+        m_next = nullptr;
+      } else {
+        m_next = trans->m_ha_list;
+        trans->m_ha_list = this;
+      }
+#else
       m_next = trans->m_ha_list;
       trans->m_ha_list = this;
+#endif
     }
 
     return;
@@ -431,6 +444,9 @@ class Ha_trx_info {
     m_next = nullptr;
     m_ht = nullptr;
     m_flags = 0;
+#ifdef WESQL_CLUSTER
+    m_add_tail = false;
+#endif
     return;
   }
 
@@ -471,6 +487,10 @@ class Ha_trx_info {
     return m_ht;
   }
 
+#ifdef WESQL_CLUSTER
+  void set_add_tail(bool add_tail) { m_add_tail = add_tail; }
+#endif
+
  private:
   enum { TRX_READ_ONLY = 0, TRX_READ_WRITE = 1 };
   /**
@@ -491,6 +511,10 @@ class Ha_trx_info {
     May assume a combination of enum values above.
   */
   uchar m_flags;
+
+#ifdef WESQL_CLUSTER
+  bool m_add_tail;
+#endif
 };
 
 /**

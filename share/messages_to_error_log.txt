@@ -12383,13 +12383,16 @@ ER_CONSENSUS_MTS_RECOVERY_FINISHED
   eng "MTS recovery HWM consensus index: %llu, checkpoint consensus index: %llu.",
 
 ER_CONSENSUS_MTS_RECOVERY_LAST_LEAD_TERM_INDEX
-  eng "Consensus recovery applier start index, last leader log term: %llu, last leader term log index: %llu, last log term: %llu.",
+  eng "Consensus recovery start apply index, last leader log term: %llu, last leader term log index: %llu, last log term: %llu.",
 
 ER_CONSENSUS_RECOVERY_APPLIED_INDEX_START
-  eng "Consensus recovery applier start index, recover status: %llu, first_index: %llu, start apply index: %llu, committed HWM index: %llu, applier index: %llu."
+  eng "Consensus recovery start apply index, recover status: %llu, first_index: %llu, start apply index: %llu, committed HWM index: %llu, applier index: %llu."
 
 ER_CONSENSUS_RECOVERY_APPLIED_INDEX_STOP
-  eng "Consensus recovery applier start index, recovered index: %llu."
+  eng "Consensus recovery start apply index, recovered index: %llu."
+
+ER_CONSENSUS_RECOVERY_GTID_FINISHED
+  eng "Consensus recovery gtid sets finished."
 
 ER_CONSENSUS_RECOVERY_LAST_TERM_INDEX
   eng "Failed to find the index of the last leader term"
@@ -12508,17 +12511,11 @@ ER_CONSENSUS_STATE_FOLLOWER_UPGRADE
 ER_CONSENSUS_STATE_FOLLOWER_CHANGE_TERM
   eng "Consensus state follower changed term, term: %llu"
 
-ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STARTED
-  eng "Consensus commit advance thread started"
-
 ER_CONSENSUS_COMMIT_POSITION_WAIT
   eng "Consensus commit advance thread wait for the commit index update, term: %llu, commit index: %llu."
 
 ER_CONSENSUS_COMMIT_POSITION_ADVANCED
   eng "Consensus commit advance thread updated the commit position, log file: '%s', pos: %llu, term: %llu, commit index: %llu."
-
-ER_CONSENSUS_COMMIT_ADVANCE_THREAD_STOPPED
-  eng "Consensus commit advance thread was terminated because of %s"
 
 ER_CONSENSUS_COMMIT_INDEX_ADVANCED
   eng "Consensus commit index advanced, commit index: %llu, local system log index: %llu."
@@ -12570,6 +12567,12 @@ ER_CONSENSUS_META_MALFORMED_CLUSTER_INFO_ERROR
 
 ER_CONSENSUS_CREATE_THRERD_ERROR
   eng "Failed to create thread: %s."
+
+ER_CONSENSUS_THREAD_STARTED
+  eng "Consensus %s thread started"
+
+ER_CONSENSUS_THREAD_STOPPED
+  eng "Consensus %s thread was terminated because of %s"
 
 ER_CONSENSUS_SERVER_NOT_READY
   eng "The server is not allowed to do current operation."
